@@ -29,3 +29,7 @@ Run the example Starlight site
 npm run dev
 ```
 
+# TODO:
+
+- e-tag checking of existing content
+- update gitignore for base directories if it exists

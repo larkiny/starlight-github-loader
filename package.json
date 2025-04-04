@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "clean": "rm -rf src/content/docs/algokit src/content/docs/references .astro",
     "preview": "astro preview",
     "astro": "astro"
   },

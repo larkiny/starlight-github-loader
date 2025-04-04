@@ -1,5 +1,5 @@
-src/content/algokit
-src/content/references
+src/content/docs/algokit
+src/content/docs/references
 
 # build output
 dist/
