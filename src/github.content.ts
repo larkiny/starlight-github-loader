@@ -5,6 +5,7 @@ import {INVALID_STRING_ERROR, INVALID_URL_ERROR} from "./github.constants";
 import type {FetchOptions} from "./github.fetch";
 import type {LoaderContext} from "./github.types";
 import {existsSync, promises as fs} from "node:fs";
+import {getConditionalHeaders, storeConditionalHeaders} from "./utils";
 
 
 export interface RenderedContent {
@@ -72,7 +73,7 @@ export async function syncEntry(
     context: LoaderContext,
     {url, editUrl}: {url: string | URL | null, editUrl: string},
     options: RootOptions,
-    init?: RequestInit
+    init: RequestInit = {}
 ) {
 
     // Exit on null or if the URL is invalid
@@ -95,10 +96,21 @@ export async function syncEntry(
     // Custom ID, TODO: Allow custom id generators
     let id = generateId(options)
 
-    const contents = await fetch(url, init).then(res => {
-        if(!res.ok) throw new Error(res.statusText)
-        return res.text()
+
+    init.headers = getConditionalHeaders({
+        init: init.headers,
+        meta,
+        id,
     })
+
+    const res = await fetch(url, init)
+
+    if(res.status === 304) {
+        logger.info(`Skipping ${id} as it has not changed`)
+        return
+    }
+    if(!res.ok) throw new Error(res.statusText)
+    const contents = await res.text()
     const entryType = configForFile(options?.path || 'tmp.mdx')
     if(!entryType) throw new Error('No entry type found')
 
@@ -117,9 +129,11 @@ export async function syncEntry(
     if (existingEntry && existingEntry.digest === digest && existingEntry.filePath) {
         return;
     }
-
     // Write file to path
-    if(!existsSync(fileURLToPath(filePath))) await syncFile(fileURLToPath(filePath), contents)
+    if(!existsSync(fileURLToPath(filePath))) {
+        logger.info(`Writing ${id} to ${filePath}`)
+        await syncFile(fileURLToPath(filePath), contents)
+    }
 
     const parsedData = await parseData({
         id,
@@ -128,6 +142,7 @@ export async function syncEntry(
     });
 
     if (entryType.getRenderFunction) {
+        logger.info(`Rendering ${id}`)
         const render = await entryType.getRenderFunction(config);
         let rendered: RenderedContent | undefined = undefined;
         try {
@@ -161,6 +176,12 @@ export async function syncEntry(
     } else {
         store.set({ id, data: parsedData, body, filePath: relativePath, digest });
     }
+
+    storeConditionalHeaders({
+        headers: res.headers,
+        meta,
+        id,
+    })
 }
 type CollectionEntryOptions ={
   context: LoaderContext,
