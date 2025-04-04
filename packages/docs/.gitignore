@@ -1,5 +1,6 @@
 src/content/docs/algokit
 src/content/docs/references
+src/content/docs/typedoc
 
 # build output
 dist/
