@@ -1,5 +1,6 @@
 # Starlight Github Loader
 
+
 Loads content from a remote resource on Github and adds it to a collection
 
 ```typescript
@@ -68,6 +69,11 @@ Run the example Starlight site
 ```bash
 npm run dev
 ```
+
+## About
+
+This was created during the [2025 Algorand Developer Retreat](https://github.com/Algorand-Developer-Retreat) as a 
+way to help manage the developer documentation in the Algorand/Algokit ecosystems!
 
 # TODO:
 
