@@ -7,7 +7,7 @@ import {
   INVALID_URL_ERROR,
 } from "./github.constants.js";
 
-import type { LoaderContext, CollectionEntryOptions, RootOptions, RenderedContent } from "./github.types.js";
+import type { LoaderContext, CollectionEntryOptions, RootOptions, RenderedContent, TransformContext } from "./github.types.js";
 
 /**
  * Generates a unique identifier based on the given options.
@@ -116,19 +116,35 @@ export async function syncEntry(
   }
   if (!res.ok) throw new Error(res.statusText);
   const contents = await res.text();
+  
+  // Apply transformations if configured
+  let processedContent = contents;
+  if (options.transforms?.length) {
+    const transformContext: TransformContext = {
+      path: options.path || '',
+      owner: options.owner,
+      repo: options.repo,
+      ref: options.ref || 'main'
+    };
+    
+    for (const transform of options.transforms) {
+      processedContent = await transform(processedContent, transformContext);
+    }
+  }
+  
   const entryType = configForFile(options?.path || "tmp.mdx");
   if (!entryType) throw new Error("No entry type found");
 
   const relativePath = generatePath(options, id);
   const filePath = pathToFileURL(relativePath);
   const { body, data } = await entryType.getEntryInfo({
-    contents,
+    contents: processedContent,
     fileUrl: filePath,
   });
 
   const existingEntry = store.get(id);
 
-  const digest = generateDigest(contents);
+  const digest = generateDigest(processedContent);
 
   if (
     existingEntry &&
@@ -140,7 +156,7 @@ export async function syncEntry(
   // Write file to path
   if (!existsSync(fileURLToPath(filePath))) {
     logger.info(`Writing ${id} to ${filePath}`);
-    await syncFile(fileURLToPath(filePath), contents);
+    await syncFile(fileURLToPath(filePath), processedContent);
   }
 
   const parsedData = await parseData({

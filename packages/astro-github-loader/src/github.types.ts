@@ -6,6 +6,16 @@ import type { ContentEntryType } from "astro";
 import type {MarkdownHeading} from "@astrojs/markdown-remark";
 import {Octokit} from "octokit";
 
+export type TransformFunction = (content: string, context: TransformContext) => Promise<string> | string;
+
+export type TransformContext = {
+  path: string;
+  owner: string;
+  repo: string;
+  ref: string;
+  metadata?: Record<string, any>;
+};
+
 export type GithubLoaderOptions = {
   octokit: Octokit;
   configs: Array<RootOptions>;
@@ -108,6 +118,10 @@ export type RootOptions = {
    * A specific reference in Github
    */
   ref?: string;
+  /**
+   * Array of transformation functions to apply to file content before processing
+   */
+  transforms?: TransformFunction[];
 };
 
 export type FetchOptions = RequestInit & {

@@ -42,6 +42,63 @@ export const collections = {
 };
 ```
 
+## Using Content Transformers
+
+You can apply transformations to content before it's processed by adding a `transforms` array to your configuration:
+
+```typescript
+import { defineCollection } from "astro:content";
+import { docsLoader } from "@astrojs/starlight/loaders";
+import { docsSchema } from "@astrojs/starlight/schema";
+
+import { Octokit } from "octokit";
+
+import { github } from "./github.loader";
+import type { RootOptions, TransformFunction } from "./github.content";
+import type { LoaderContext } from "./github.types";
+
+// Define transformation functions
+const addFrontmatter: TransformFunction = (content, context) => {
+  return `---
+title: ${context.path.replace('.mdx', '').replace(/\//g, ' ')}
+source: ${context.owner}/${context.repo}
+---
+${content}`;
+};
+
+const removeInternalComments: TransformFunction = (content) => {
+  return content.replace(/<!-- INTERNAL.*?-->/gs, '');
+};
+
+const FIXTURES_WITH_TRANSFORMS: RootOptions[] = [
+  {
+    owner: "awesome-algorand",
+    repo: "algokit-cli", 
+    ref: "docs/starlight-preview",
+    path: ".devportal/starlight",
+    replace: ".devportal/starlight/",
+    basePath: "src/content/docs",
+    transforms: [removeInternalComments, addFrontmatter]
+  },
+];
+
+const octokit = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
+export const collections = {
+  docs: defineCollection({
+    loader: {
+      name: "github-starlight",
+      load: async (context) => {
+        await docsLoader().load(context);
+        await github({ octokit, configs: FIXTURES_WITH_TRANSFORMS, clear: false }).load(
+          context as LoaderContext,
+        );
+      },
+    },
+    schema: docsSchema(),
+  }),
+};
+```
+
 The module is not published yet, but you can try the loader out by following the Get Started Guide
 
 ## Get Started
