@@ -16,6 +16,10 @@ const FIXTURES: RootOptions[] = [
     path: ".devportal/starlight",
     replace: ".devportal/starlight/",
     basePath: "src/content/docs",
+    // Asset configuration for downloading and transforming images
+    assetsPath: "src/assets/docs",
+    assetsBaseUrl: "/assets/docs",
+    assetPatterns: ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'],
   },
 ];
 

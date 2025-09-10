@@ -1,5 +1,6 @@
 import { existsSync, promises as fs } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { join, dirname, basename, extname } from "node:path";
 
 import {
   INVALID_SERVICE_RESPONSE,
@@ -64,6 +65,212 @@ export async function syncFile(path: string, content: string) {
 }
 
 /**
+ * Default asset patterns for common image and media file types
+ * @internal
+ */
+const DEFAULT_ASSET_PATTERNS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp'];
+
+/**
+ * Detects asset references in markdown content using regex patterns
+ * @param content - The markdown content to parse
+ * @param assetPatterns - File extensions to treat as assets
+ * @returns Array of detected asset paths
+ * @internal
+ */
+export function detectAssets(content: string, assetPatterns: string[] = DEFAULT_ASSET_PATTERNS): string[] {
+  const assets: string[] = [];
+  const patterns = assetPatterns.map(ext => ext.toLowerCase());
+  
+  // Match markdown images: ![alt](path)
+  const imageRegex = /!\[[^\]]*\]\(([^)]+)\)/g;
+  let match;
+  
+  while ((match = imageRegex.exec(content)) !== null) {
+    const assetPath = match[1];
+    // Only include relative paths and assets matching our patterns
+    if (assetPath.startsWith('./') || assetPath.startsWith('../') || !assetPath.includes('://')) {
+      const ext = extname(assetPath).toLowerCase();
+      if (patterns.includes(ext)) {
+        assets.push(assetPath);
+      }
+    }
+  }
+  
+  // Match HTML img tags: <img src="path">
+  const htmlImgRegex = /<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  while ((match = htmlImgRegex.exec(content)) !== null) {
+    const assetPath = match[1];
+    if (assetPath.startsWith('./') || assetPath.startsWith('../') || !assetPath.includes('://')) {
+      const ext = extname(assetPath).toLowerCase();
+      if (patterns.includes(ext)) {
+        assets.push(assetPath);
+      }
+    }
+  }
+  
+  return [...new Set(assets)]; // Remove duplicates
+}
+
+/**
+ * Downloads an asset from GitHub and saves it locally
+ * @param octokit - GitHub API client
+ * @param owner - Repository owner
+ * @param repo - Repository name  
+ * @param ref - Git reference
+ * @param assetPath - Path to the asset in the repository
+ * @param localPath - Local path where the asset should be saved
+ * @param signal - Abort signal for cancellation
+ * @returns Promise that resolves when the asset is downloaded
+ * @internal
+ */
+export async function downloadAsset(
+  octokit: any,
+  owner: string,
+  repo: string,
+  ref: string,
+  assetPath: string,
+  localPath: string,
+  signal?: AbortSignal
+): Promise<void> {
+  try {
+    const { data } = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path: assetPath,
+      ref,
+      request: { signal },
+    });
+
+    if (Array.isArray(data) || data.type !== 'file' || !data.download_url) {
+      throw new Error(`Asset ${assetPath} is not a valid file`);
+    }
+
+    const response = await fetch(data.download_url, { signal });
+    if (!response.ok) {
+      throw new Error(`Failed to download asset: ${response.statusText}`);
+    }
+
+    const buffer = await response.arrayBuffer();
+    const dir = dirname(localPath);
+    
+    if (!existsSync(dir)) {
+      await fs.mkdir(dir, { recursive: true });
+    }
+    
+    await fs.writeFile(localPath, new Uint8Array(buffer));
+  } catch (error: any) {
+    if (error.status === 404) {
+      console.warn(`Asset not found: ${assetPath}`);
+      return;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Transforms asset references in markdown content to use local paths
+ * @param content - The markdown content to transform
+ * @param assetMap - Map of original asset paths to new local paths
+ * @returns Transformed content with updated asset references
+ * @internal
+ */
+export function transformAssetReferences(content: string, assetMap: Map<string, string>): string {
+  let transformedContent = content;
+  
+  for (const [originalPath, newPath] of assetMap) {
+    // Transform markdown images
+    const imageRegex = new RegExp(`(!)\\[([^\\]]*)\\]\\(\\s*${escapeRegExp(originalPath)}\\s*\\)`, 'g');
+    transformedContent = transformedContent.replace(imageRegex, `$1[$2](${newPath})`);
+    
+    // Transform HTML img tags
+    const htmlRegex = new RegExp(`(<img[^>]+src\\s*=\\s*["'])${escapeRegExp(originalPath)}(["'][^>]*>)`, 'gi');
+    transformedContent = transformedContent.replace(htmlRegex, `$1${newPath}$2`);
+  }
+  
+  return transformedContent;
+}
+
+/**
+ * Escapes special regex characters in a string
+ * @internal
+ */
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Processes assets in markdown content by detecting, downloading, and transforming references
+ * @param content - The markdown content to process
+ * @param options - Configuration options including asset settings
+ * @param octokit - GitHub API client
+ * @param signal - Abort signal for cancellation
+ * @returns Promise that resolves to transformed content
+ * @internal
+ */
+async function processAssets(
+  content: string,
+  options: RootOptions,
+  octokit: any,
+  signal?: AbortSignal
+): Promise<string> {
+  const { owner, repo, ref = 'main', path: basePath = '', assetsPath, assetsBaseUrl, assetPatterns } = options;
+  
+  if (!assetsPath || !assetsBaseUrl) {
+    return content;
+  }
+
+  // Detect assets in the content
+  const detectedAssets = detectAssets(content, assetPatterns);
+  if (detectedAssets.length === 0) {
+    return content;
+  }
+
+  const assetMap = new Map<string, string>();
+  
+  // Process each detected asset
+  await Promise.all(detectedAssets.map(async (assetPath) => {
+    try {
+      // Resolve the asset path relative to the current markdown file
+      const resolvedAssetPath = resolveAssetPath(basePath, assetPath);
+      
+      // Generate unique filename to avoid conflicts
+      const originalFilename = basename(assetPath);
+      const ext = extname(originalFilename);
+      const nameWithoutExt = basename(originalFilename, ext);
+      const uniqueFilename = `${nameWithoutExt}-${Date.now()}${ext}`;
+      const localPath = join(assetsPath, uniqueFilename);
+      
+      // Download the asset
+      await downloadAsset(octokit, owner, repo, ref, resolvedAssetPath, localPath, signal);
+      
+      // Generate URL for the transformed reference
+      const assetUrl = `${assetsBaseUrl}/${uniqueFilename}`.replace(/\/+/g, '/');
+      
+      // Map the transformation
+      assetMap.set(assetPath, assetUrl);
+    } catch (error) {
+      console.warn(`Failed to process asset ${assetPath}:`, error);
+    }
+  }));
+
+  // Transform the content with new asset references
+  return transformAssetReferences(content, assetMap);
+}
+
+/**
+ * Resolves an asset path relative to a base path
+ * @internal
+ */
+function resolveAssetPath(basePath: string, assetPath: string): string {
+  if (assetPath.startsWith('./')) {
+    return join(dirname(basePath), assetPath.slice(2));
+  } else if (assetPath.startsWith('../')) {
+    return join(dirname(basePath), assetPath);
+  }
+  return assetPath;
+}
+
+/**
  * Synchronizes an entry by fetching its contents, validating its metadata, and storing or rendering it as needed.
  *
  * @param {LoaderContext} context - The loader context containing the required utilities, metadata, and configuration.
@@ -71,6 +278,7 @@ export async function syncFile(path: string, content: string) {
  * @param {string | URL | null} urls.url - The URL of the entry to fetch. Throws an error if null or invalid.
  * @param {string} urls.editUrl - The URL for editing the entry.
  * @param {RootOptions} options - Configuration settings for processing the entry such as file paths and custom options.
+ * @param {any} octokit - GitHub API client for downloading assets.
  * @param {RequestInit} [init] - Optional parameter for customizing the fetch request.
  * @return {Promise<void>} Resolves when the entry has been successfully processed and stored. Throws errors if invalid URL, missing configuration, or other issues occur.
  * @internal
@@ -79,6 +287,7 @@ export async function syncEntry(
   context: LoaderContext,
   { url, editUrl }: { url: string | URL | null; editUrl: string },
   options: RootOptions,
+  octokit: any,
   init: RequestInit = {},
 ) {
   // Exit on null or if the URL is invalid
@@ -115,9 +324,18 @@ export async function syncEntry(
     return;
   }
   if (!res.ok) throw new Error(res.statusText);
-  const contents = await res.text();
+  let contents = await res.text();
   const entryType = configForFile(options?.path || "tmp.mdx");
   if (!entryType) throw new Error("No entry type found");
+
+  // Process assets if configuration is provided
+  if (options.assetsPath && options.assetsBaseUrl) {
+    await processAssets(contents, options, octokit, init.signal || undefined).then(transformedContent => {
+      contents = transformedContent;
+    }).catch(error => {
+      logger.warn(`Asset processing failed for ${id}: ${error.message}`);
+    });
+  }
 
   const relativePath = generatePath(options, id);
   const filePath = pathToFileURL(relativePath);
@@ -228,6 +446,7 @@ export async function toCollectionEntry({
           context,
           { url: data.download_url, editUrl: data.url },
           { ...options, path, ref },
+          octokit,
           { signal },
         );
       default:
@@ -253,6 +472,7 @@ export async function toCollectionEntry({
             context,
             { url: download_url, editUrl: url },
             { ...options, path, ref },
+            octokit,
             { signal },
           );
         default:

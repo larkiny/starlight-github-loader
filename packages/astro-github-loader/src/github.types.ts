@@ -108,6 +108,19 @@ export type RootOptions = {
    * A specific reference in Github
    */
   ref?: string;
+  /**
+   * Local directory path where downloaded assets should be stored
+   */
+  assetsPath?: string;
+  /**
+   * Base URL prefix for asset references in transformed markdown content
+   */
+  assetsBaseUrl?: string;
+  /**
+   * Array of file extensions to treat as assets (e.g., ['.png', '.jpg', '.svg'])
+   * Defaults to common image formats if not specified
+   */
+  assetPatterns?: string[];
 };
 
 export type FetchOptions = RequestInit & {
