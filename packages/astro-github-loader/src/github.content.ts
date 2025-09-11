@@ -21,9 +21,14 @@ import type { LoaderContext, CollectionEntryOptions, RootOptions, RenderedConten
  * @internal
  */
 export function generateId(options: RootOptions) {
-  let id = options.path?.replace(".mdx", "") || "";
+  let id = options.path || "";
   if (typeof options.replace === "string") {
     id = id.replace(options.replace, "");
+  }
+  // Remove file extension for ID generation
+  const lastDotIndex = id.lastIndexOf('.');
+  if (lastDotIndex > 0) {
+    id = id.substring(0, lastDotIndex);
   }
   return id;
 }
@@ -39,9 +44,13 @@ export function generateId(options: RootOptions) {
  */
 export function generatePath(options: RootOptions, id?: string) {
   if (typeof id === "string") {
-    return `${options.basePath ? `${options.basePath}/` : ""}${id}.mdx`;
+    // Preserve original file extension from options.path
+    const originalPath = options.path || "";
+    const lastDotIndex = originalPath.lastIndexOf('.');
+    const extension = lastDotIndex > 0 ? originalPath.substring(lastDotIndex) : '.md';
+    return `${options.basePath ? `${options.basePath}/` : ""}${id}${extension}`;
   }
-  return options.path?.replace(".mdx", "") || "";
+  return options.path || "";
 }
 
 /**
@@ -325,7 +334,7 @@ export async function syncEntry(
   }
   if (!res.ok) throw new Error(res.statusText);
   let contents = await res.text();
-  const entryType = configForFile(options?.path || "tmp.mdx");
+  const entryType = configForFile(options?.path || "tmp.md");
   if (!entryType) throw new Error("No entry type found");
 
   // Process assets if configuration is provided

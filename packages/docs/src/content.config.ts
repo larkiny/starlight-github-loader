@@ -16,10 +16,9 @@ const FIXTURES: RootOptions[] = [
     path: ".devportal/starlight",
     replace: ".devportal/starlight/",
     basePath: "src/content/docs",
-    // Asset configuration for downloading and transforming images
-    assetsPath: "src/assets/docs",
-    assetsBaseUrl: "/assets/docs",
-    assetPatterns: ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'],
+    assetsPath: "src/assets/imports/algokit-cli",
+    assetsBaseUrl: "~/assets/imports/algokit-cli",
+    assetPatterns: [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"],
   },
 ];
 
@@ -28,7 +27,7 @@ export const collections = {
   docs: defineCollection({
     loader: {
       name: "github-starlight",
-      load: async (context ) => {
+      load: async (context) => {
         await docsLoader().load(context);
         await github({ octokit, configs: FIXTURES, clear: false }).load(
           context as LoaderContext,

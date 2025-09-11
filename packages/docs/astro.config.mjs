@@ -15,9 +15,7 @@ export default defineConfig({
           sidebar: {
             label: "Github Loader",
           },
-          entryPoints: [
-            "../astro-github-loader/src/index.ts",
-          ],
+          entryPoints: ["../astro-github-loader/src/index.ts"],
           tsconfig: "../astro-github-loader/tsconfig.json",
         }),
       ],

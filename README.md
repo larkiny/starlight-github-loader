@@ -31,7 +31,11 @@ export const collections = {
       name: "github-starlight",
       load: async (context) => {
         await docsLoader().load(context);
-        await github({ octokit, configs: FIXTURES, clear: false }).load(
+        await github({ 
+          octokit, 
+          configs: FIXTURES, 
+          clear: true  // Clear directories and content store before importing
+        }).load(
           context as LoaderContext
         );
       },
