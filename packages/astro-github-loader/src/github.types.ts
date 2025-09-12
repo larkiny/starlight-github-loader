@@ -6,9 +6,29 @@ import type { ContentEntryType } from "astro";
 import type {MarkdownHeading} from "@astrojs/markdown-remark";
 import {Octokit} from "octokit";
 
+/**
+ * Context object passed to transform functions
+ */
+export interface TransformContext {
+  /** Generated ID for the content */
+  id: string;
+  /** File path within the repository */
+  path: string;
+  /** Full configuration options */
+  options: ImportOptions;
+}
+
+/**
+ * Function type for content transformations
+ * @param content - The markdown content to transform
+ * @param context - Context information about the file being processed
+ * @returns The transformed content
+ */
+export type TransformFunction = (content: string, context: TransformContext) => string;
+
 export type GithubLoaderOptions = {
   octokit: Octokit;
-  configs: Array<RootOptions>;
+  configs: Array<ImportOptions>;
   clear?: boolean;
   gitIgnore?: string;
   basePath?: string;
@@ -40,7 +60,7 @@ export type CollectionEntryOptions = {
    * Represents the configuration options for initializing or customizing the root application behavior.
    * The option object may include various properties that control specific features or behavior of the application.
    */
-  options: RootOptions;
+  options: ImportOptions;
   /**
    * An optional AbortSignal instance that enables observing and controlling the
    * abort state of an operation. It can be used to signal cancellation requests
@@ -80,9 +100,9 @@ export interface RenderedContent {
 }
 
 /**
- * Represents configuration options for all tree operations.
+ * Represents configuration options for importing content from GitHub repositories.
  */
-export type RootOptions = {
+export type ImportOptions = {
   /**
    * Display name for this configuration (used in logging)
    */
@@ -133,6 +153,10 @@ export type RootOptions = {
    * Whether to clear target directories before importing content
    */
   clear?: boolean;
+  /**
+   * Array of transform functions to apply to content before processing
+   */
+  transforms?: TransformFunction[];
 };
 
 export type FetchOptions = RequestInit & {

@@ -10,10 +10,10 @@ import { docsSchema } from "@astrojs/starlight/schema";
 import { Octokit } from "octokit";
 
 import { githubLoader } from "./github.loader";
-import type { RootOptions } from "./github.content";
+import type { ImportOptions } from "./github.types";
 import type { LoaderContext } from "./github.types";
 
-const FIXTURES: RootOptions[] = [
+const FIXTURES: ImportOptions[] = [
   {
     owner: "awesome-algorand",
     repo: "algokit-cli",
@@ -55,14 +55,15 @@ import { docsSchema } from "@astrojs/starlight/schema";
 import { Octokit } from "octokit";
 
 import { githubLoader } from "./github.loader";
-import type { RootOptions, TransformFunction } from "./github.content";
+import type { RootOptions, TransformFunction } from "./github.types";
 import type { LoaderContext } from "./github.types";
 
 // Define transformation functions
 const addFrontmatter: TransformFunction = (content, context) => {
+  const title = context.path.replace(/\.(md|mdx)$/, "").replace(/\//g, " ");
   return `---
-title: ${context.path.replace(".mdx", "").replace(/\//g, " ")}
-source: ${context.owner}/${context.repo}
+title: ${title}
+source: ${context.options.owner}/${context.options.repo}
 ---
 ${content}`;
 };
@@ -71,7 +72,7 @@ const removeInternalComments: TransformFunction = (content) => {
   return content.replace(/<!-- INTERNAL.*?-->/gs, "");
 };
 
-const FIXTURES_WITH_TRANSFORMS: RootOptions[] = [
+const FIXTURES_WITH_TRANSFORMS: ImportOptions[] = [
   {
     owner: "awesome-algorand",
     repo: "algokit-cli",
@@ -114,10 +115,10 @@ import { docsSchema } from "@astrojs/starlight/schema";
 import { Octokit } from "octokit";
 
 import { githubLoader } from "./github.loader";
-import type { RootOptions } from "./github.content";
+import type { ImportOptions } from "./github.types";
 import type { LoaderContext } from "./github.types";
 
-const FIXTURES_WITH_ASSETS: RootOptions[] = [
+const FIXTURES_WITH_ASSETS: ImportOptions[] = [
   {
     owner: "awesome-algorand",
     repo: "algokit-cli",

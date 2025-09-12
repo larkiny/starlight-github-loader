@@ -5,7 +5,7 @@ import { toCollectionEntry } from "./github.content.js";
 import type {
   Loader,
   GithubLoaderOptions,
-  RootOptions,
+  ImportOptions,
 } from "./github.types.js";
 
 /**
@@ -13,7 +13,7 @@ import type {
  * @param configs - Array of configuration objects containing directory paths
  * @internal
  */
-async function clearDirectories(configs: RootOptions[]): Promise<void> {
+async function clearDirectories(configs: ImportOptions[]): Promise<void> {
   const directoriesToClear = new Set<string>();
 
   // Collect unique directories from all configs

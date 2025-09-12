@@ -8,7 +8,7 @@ import {
   INVALID_URL_ERROR,
 } from "./github.constants.js";
 
-import type { LoaderContext, CollectionEntryOptions, RootOptions, RenderedContent } from "./github.types.js";
+import type { LoaderContext, CollectionEntryOptions, ImportOptions, RenderedContent } from "./github.types.js";
 
 /**
  * Generates a unique identifier based on the given options.
@@ -20,7 +20,7 @@ import type { LoaderContext, CollectionEntryOptions, RootOptions, RenderedConten
  *
  * @internal
  */
-export function generateId(options: RootOptions) {
+export function generateId(options: ImportOptions) {
   let id = options.path || "";
   if (typeof options.replace === "string") {
     id = id.replace(options.replace, "");
@@ -42,7 +42,7 @@ export function generateId(options: RootOptions) {
  * provided or the base path configuration. Returns an empty string if no path can be generated.
  * @internal
  */
-export function generatePath(options: RootOptions, id?: string) {
+export function generatePath(options: ImportOptions, id?: string) {
   if (typeof id === "string") {
     // Preserve original file extension from options.path
     const originalPath = options.path || "";
@@ -218,7 +218,7 @@ function escapeRegExp(string: string): string {
  */
 async function processAssets(
   content: string,
-  options: RootOptions,
+  options: ImportOptions,
   octokit: any,
   signal?: AbortSignal
 ): Promise<string> {
@@ -295,7 +295,7 @@ function resolveAssetPath(basePath: string, assetPath: string): string {
 export async function syncEntry(
   context: LoaderContext,
   { url, editUrl }: { url: string | URL | null; editUrl: string },
-  options: RootOptions,
+  options: ImportOptions,
   octokit: any,
   init: RequestInit = {},
 ) {
@@ -336,6 +336,23 @@ export async function syncEntry(
   let contents = await res.text();
   const entryType = configForFile(options?.path || "tmp.md");
   if (!entryType) throw new Error("No entry type found");
+
+  // Apply content transforms if provided
+  if (options.transforms && options.transforms.length > 0) {
+    const transformContext = {
+      id,
+      path: options.path || "",
+      options,
+    };
+    
+    for (const transform of options.transforms) {
+      try {
+        contents = transform(contents, transformContext);
+      } catch (error) {
+        logger.warn(`Transform failed for ${id}: ${error}`);
+      }
+    }
+  }
 
   // Process assets if configuration is provided
   if (options.assetsPath && options.assetsBaseUrl) {
