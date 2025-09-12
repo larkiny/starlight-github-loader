@@ -1,5 +1,5 @@
 import { beforeEach, describe, it } from "vitest";
-import { github } from "./github.loader.js";
+import { githubLoader } from "./github.loader.js";
 import { Octokit } from "octokit";
 
 const FIXTURES = [
@@ -10,14 +10,14 @@ const FIXTURES = [
     path: ".devportal/starlight",
   },
 ];
-describe("github loader", () => {
+describe("githubLoader", () => {
   let octokit: Octokit;
   beforeEach(() => {
     octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
   });
 
   it("should work", async () => {
-    const result = github({ octokit, configs: FIXTURES });
+    const result = githubLoader({ octokit, configs: FIXTURES });
 
     console.log(result);
   });

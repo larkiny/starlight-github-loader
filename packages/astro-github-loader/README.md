@@ -9,7 +9,7 @@ import { docsSchema } from "@astrojs/starlight/schema";
 
 import { Octokit } from "octokit";
 
-import { github } from "./github.loader";
+import { githubLoader } from "./github.loader";
 import type { RootOptions } from "./github.content";
 import type { LoaderContext } from "./github.types";
 
@@ -31,7 +31,7 @@ export const collections = {
       name: "github-starlight",
       load: async (context) => {
         await docsLoader().load(context);
-        await github({
+        await githubLoader({
           octokit,
           configs: FIXTURES,
           clear: true, // Clear directories and content store before importing
@@ -54,7 +54,7 @@ import { docsSchema } from "@astrojs/starlight/schema";
 
 import { Octokit } from "octokit";
 
-import { github } from "./github.loader";
+import { githubLoader } from "./github.loader";
 import type { RootOptions, TransformFunction } from "./github.content";
 import type { LoaderContext } from "./github.types";
 
@@ -90,7 +90,7 @@ export const collections = {
       name: "github-starlight",
       load: async (context) => {
         await docsLoader().load(context);
-        await github({
+        await githubLoader({
           octokit,
           configs: FIXTURES_WITH_TRANSFORMS,
           clear: false,
@@ -113,7 +113,7 @@ import { docsSchema } from "@astrojs/starlight/schema";
 
 import { Octokit } from "octokit";
 
-import { github } from "./github.loader";
+import { githubLoader } from "./github.loader";
 import type { RootOptions } from "./github.content";
 import type { LoaderContext } from "./github.types";
 
@@ -148,7 +148,7 @@ export const collections = {
       name: "github-starlight-with-assets",
       load: async (context) => {
         await docsLoader().load(context);
-        await github({
+        await githubLoader({
           octokit,
           configs: FIXTURES_WITH_ASSETS,
           clear: false,
