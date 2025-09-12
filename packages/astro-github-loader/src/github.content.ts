@@ -81,6 +81,122 @@ export async function syncFile(path: string, content: string) {
 const DEFAULT_ASSET_PATTERNS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp'];
 
 /**
+ * Cache keys for storing content data in meta store
+ * @internal
+ */
+const CACHE_KEYS = {
+  CONTENT: (id: string) => `${id}-cached-content`,
+  DATA: (id: string) => `${id}-cached-data`, 
+  BODY: (id: string) => `${id}-cached-body`,
+  DIGEST: (id: string) => `${id}-cached-digest`,
+  FILE_PATH: (id: string) => `${id}-cached-filepath`,
+} as const;
+
+/**
+ * Stores processed content in the meta store for caching
+ * @internal
+ */
+function storeCachedContent(
+  meta: LoaderContext["meta"],
+  id: string,
+  content: {
+    rawContent: string;
+    data: Record<string, any>;
+    body: string;
+    digest: string;
+    filePath: string;
+  }
+): void {
+  try {
+    // Basic size limit to prevent excessive memory usage
+    const MAX_CONTENT_SIZE = 1024 * 1024; // 1MB per file
+    if (content.rawContent.length > MAX_CONTENT_SIZE) {
+      console.warn(`Content too large to cache for ${id} (${content.rawContent.length} bytes)`);
+      return;
+    }
+    
+    meta.set(CACHE_KEYS.CONTENT(id), content.rawContent);
+    meta.set(CACHE_KEYS.DATA(id), JSON.stringify(content.data));
+    meta.set(CACHE_KEYS.BODY(id), content.body);
+    meta.set(CACHE_KEYS.DIGEST(id), content.digest);
+    meta.set(CACHE_KEYS.FILE_PATH(id), content.filePath);
+  } catch (error) {
+    // If caching fails, log but don't break the process
+    console.warn(`Failed to cache content for ${id}:`, error);
+  }
+}
+
+/**
+ * Retrieves cached content from the meta store
+ * @internal
+ */
+function getCachedContent(
+  meta: LoaderContext["meta"],
+  id: string
+): {
+  rawContent: string;
+  data: Record<string, any>;
+  body: string;
+  digest: string;
+  filePath: string;
+} | null {
+  try {
+    const rawContent = meta.get(CACHE_KEYS.CONTENT(id));
+    const dataJson = meta.get(CACHE_KEYS.DATA(id));
+    const body = meta.get(CACHE_KEYS.BODY(id));
+    const digest = meta.get(CACHE_KEYS.DIGEST(id));
+    const filePath = meta.get(CACHE_KEYS.FILE_PATH(id));
+    
+    // Validate all required cache entries are present
+    if (!rawContent || !dataJson || !body || !digest || !filePath) {
+      // Clean up partial cache entries
+      clearCacheForId(meta, id);
+      return null;
+    }
+    
+    // Validate JSON parsing
+    let data: Record<string, any>;
+    try {
+      data = JSON.parse(dataJson);
+    } catch (parseError) {
+      console.warn(`Invalid JSON in cached data for ${id}:`, parseError);
+      clearCacheForId(meta, id);
+      return null;
+    }
+    
+    // Basic validation of data structure
+    if (typeof data !== 'object' || data === null) {
+      console.warn(`Invalid data structure in cache for ${id}`);
+      clearCacheForId(meta, id);
+      return null;
+    }
+    
+    return { rawContent, data, body, digest, filePath };
+  } catch (error) {
+    // If cache retrieval fails, clean up and return null to trigger fresh fetch
+    console.warn(`Failed to retrieve cached content for ${id}:`, error);
+    clearCacheForId(meta, id);
+    return null;
+  }
+}
+
+/**
+ * Clears all cached data for a specific ID
+ * @internal
+ */
+function clearCacheForId(meta: LoaderContext["meta"], id: string): void {
+  try {
+    meta.delete(CACHE_KEYS.CONTENT(id));
+    meta.delete(CACHE_KEYS.DATA(id));
+    meta.delete(CACHE_KEYS.BODY(id));
+    meta.delete(CACHE_KEYS.DIGEST(id));
+    meta.delete(CACHE_KEYS.FILE_PATH(id));
+  } catch (error) {
+    console.warn(`Failed to clear cache for ${id}:`, error);
+  }
+}
+
+/**
  * Checks if a file path should be included based on include/exclude patterns
  * @param filePath - The file path to check (relative to the repository root)
  * @param options - Import options containing include/exclude patterns
@@ -361,13 +477,56 @@ export async function syncEntry(
   });
 
   const res = await fetch(url, init);
+  let contents: string;
 
   if (res.status === 304) {
-    logger.info(`Skipping ${id} as it has not changed`);
-    return;
+    logger.info(`Content unchanged for ${id}, attempting to restore from cache`);
+    
+    // Try to restore from cache
+    const cachedContent = getCachedContent(meta, id);
+    if (cachedContent) {
+      // Successfully retrieved from cache, add to store
+      const parsedData = await parseData({
+        id,
+        data: cachedContent.data,
+        filePath: cachedContent.filePath,
+      });
+      
+      store.set({
+        id,
+        data: parsedData,
+        body: cachedContent.body,
+        filePath: cachedContent.filePath,
+        digest: cachedContent.digest,
+      });
+      
+      logger.info(`✅ Restored ${id} from cache`);
+      return;
+    }
+    
+    // Cache miss - fetch fresh content
+    logger.warn(`Cache miss for ${id}, fetching fresh content`);
+    // Remove ETag header and continue with fresh fetch
+    if (init.headers) {
+      const headers = new Headers(init.headers);
+      headers.delete("If-None-Match");
+      headers.delete("If-Modified-Since");
+      init.headers = headers;
+    }
+    const freshRes = await fetch(url, init);
+    if (!freshRes.ok) throw new Error(freshRes.statusText);
+    contents = await freshRes.text();
+    
+    // Update ETag/Last-Modified for the fresh response
+    syncHeaders({ headers: freshRes.headers, meta, id });
+  } else {
+    if (!res.ok) throw new Error(res.statusText);
+    contents = await res.text();
+    
+    // Update ETag/Last-Modified for successful response
+    syncHeaders({ headers: res.headers, meta, id });
   }
-  if (!res.ok) throw new Error(res.statusText);
-  let contents = await res.text();
+  
   const entryType = configForFile(options?.path || "tmp.md");
   if (!entryType) throw new Error("No entry type found");
 
@@ -463,11 +622,16 @@ export async function syncEntry(
     store.set({ id, data: parsedData, body, filePath: relativePath, digest });
   }
 
-  syncHeaders({
-    headers: res.headers,
-    meta,
-    id,
+  // Store processed content in cache for future 304 responses
+  storeCachedContent(meta, id, {
+    rawContent: contents,
+    data: data,
+    body: body,
+    digest: digest,
+    filePath: relativePath,
   });
+
+  // Note: syncHeaders is called in the main flow above, not here to avoid duplication
 }
 
 /**
