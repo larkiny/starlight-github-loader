@@ -84,6 +84,10 @@ export interface RenderedContent {
  */
 export type RootOptions = {
   /**
+   * Display name for this configuration (used in logging)
+   */
+  name?: string;
+  /**
    * Repository owner
    */
   owner: string;
@@ -121,6 +125,14 @@ export type RootOptions = {
    * Defaults to common image formats if not specified
    */
   assetPatterns?: string[];
+  /**
+   * Whether this configuration is enabled for processing
+   */
+  enabled?: boolean;
+  /**
+   * Whether to clear target directories before importing content
+   */
+  clear?: boolean;
 };
 
 export type FetchOptions = RequestInit & {

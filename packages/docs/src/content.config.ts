@@ -4,7 +4,7 @@ import { docsSchema } from "@astrojs/starlight/schema";
 
 import { Octokit } from "octokit";
 
-import { github } from "astro-github-loader";
+import { githubLoader } from "astro-github-loader";
 import type { RootOptions } from "./github.content";
 import type { LoaderContext } from "./github.types";
 
@@ -29,7 +29,7 @@ export const collections = {
       name: "github-starlight",
       load: async (context) => {
         await docsLoader().load(context);
-        await github({ octokit, configs: FIXTURES, clear: false }).load(
+        await githubLoader({ octokit, configs: FIXTURES, clear: false }).load(
           context as LoaderContext,
         );
       },
