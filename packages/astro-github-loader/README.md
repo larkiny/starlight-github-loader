@@ -1,6 +1,6 @@
 # Starlight Github Loader
 
-Loads content from a remote resource on Github and adds it to a collection
+Loads content from a remote resource on Github and adds it to a content collection
 
 ```typescript
 import { defineCollection } from "astro:content";
