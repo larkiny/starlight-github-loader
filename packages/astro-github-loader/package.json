@@ -1,14 +1,28 @@
 {
-  "name": "astro-github-loader",
+  "name": "@larkiny/astro-github-loader",
   "type": "module",
-  "version": "0.0.1",
+  "version": "1.0.0",
+  "description": "Load content from GitHub repositories into Astro content collections with asset management and content transformations",
+  "keywords": [
+    "astro",
+    "github",
+    "content",
+    "starlight",
+    "loader",
+    "markdown"
+  ],
+  "author": "Michael Feher, Larkin Young",
+  "license": "MIT",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "module": "./dist/index.js",
   "repository": {
     "type": "git",
-    "url": "git@github.com:awesome-algorand/starlight-github-loader.git",
-    "directory": "projects/astro-github-loader"
+    "url": "git+https://github.com/larkiny/starlight-github-loader-fork.git",
+    "directory": "packages/astro-github-loader"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "files": [
     "dist",
