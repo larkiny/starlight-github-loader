@@ -157,6 +157,16 @@ export type ImportOptions = {
    * Array of transform functions to apply to content before processing
    */
   transforms?: TransformFunction[];
+  /**
+   * Array of glob patterns or specific file paths to include (relative to path)
+   * If specified, only matching files will be imported
+   */
+  include?: string[];
+  /**
+   * Array of glob patterns or specific file paths to exclude (relative to path)
+   * Files matching these patterns will be skipped
+   */
+  exclude?: string[];
 };
 
 export type FetchOptions = RequestInit & {

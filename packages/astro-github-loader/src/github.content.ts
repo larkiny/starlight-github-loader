@@ -1,6 +1,7 @@
 import { existsSync, promises as fs } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join, dirname, basename, extname } from "node:path";
+import picomatch from "picomatch";
 
 import {
   INVALID_SERVICE_RESPONSE,
@@ -78,6 +79,39 @@ export async function syncFile(path: string, content: string) {
  * @internal
  */
 const DEFAULT_ASSET_PATTERNS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp'];
+
+/**
+ * Checks if a file path should be included based on include/exclude patterns
+ * @param filePath - The file path to check (relative to the repository root)
+ * @param options - Import options containing include/exclude patterns
+ * @returns true if file should be included, false otherwise
+ * @internal
+ */
+export function shouldIncludeFile(filePath: string, options: ImportOptions): boolean {
+  const { include, exclude } = options;
+  
+  // If no include/exclude patterns specified, include all files
+  if (!include && !exclude) {
+    return true;
+  }
+  
+  // Check exclude patterns first - if any match, exclude the file
+  if (exclude && exclude.length > 0) {
+    const excludeMatchers = exclude.map(pattern => picomatch(pattern));
+    if (excludeMatchers.some(matcher => matcher(filePath))) {
+      return false;
+    }
+  }
+  
+  // If include patterns are specified, file must match at least one
+  if (include && include.length > 0) {
+    const includeMatchers = include.map(pattern => picomatch(pattern));
+    return includeMatchers.some(matcher => matcher(filePath));
+  }
+  
+  // If only exclude patterns were specified and none matched, include the file
+  return true;
+}
 
 /**
  * Detects asset references in markdown content using regex patterns
@@ -480,9 +514,18 @@ export async function toCollectionEntry({
     }
   }
 
-  // Directory listing
-  const promises: Promise<any>[] = data.map(
-    ({ type, path, download_url, url }) => {
+  // Directory listing with filtering
+  const promises: Promise<any>[] = data
+    .filter(({ type, path }) => {
+      // Always include directories for recursion
+      if (type === "dir") return true;
+      // Apply filtering logic to files
+      if (type === "file") {
+        return shouldIncludeFile(path, options);
+      }
+      return false;
+    })
+    .map(({ type, path, download_url, url }) => {
       switch (type) {
         // Recurse
         case "dir":
@@ -504,8 +547,7 @@ export async function toCollectionEntry({
         default:
           throw new Error("Invalid type");
       }
-    },
-  );
+    });
   return await Promise.all(promises);
 }
 
