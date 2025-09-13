@@ -9,26 +9,11 @@ import {
   LoaderContext,
 } from "@larkiny/astro-github-loader";
 
-// const octokit = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
-// export const collections = {
-//   docs: defineCollection({
-//     loader: {
-//       name: "github-starlight",
-//       load: async (context) => {
-//         await docsLoader().load(context);
-//         await githubLoader({ octokit, configs: FIXTURES, clear: false }).load(
-//           context as LoaderContext,
-//         );
-//       },
-//     },
-//     schema: docsSchema(),
-//   }),
-// };
-
 const REMOTE_CONTENT: ImportOptions[] = [
   {
-    owner: "awesome-algorand",
-    repo: "algokit-cli",
+    name: "Algokit CLI Docs",
+    owner: "larkiny",
+    repo: "algokit-cli-docs",
     ref: "docs/starlight-preview",
     path: ".devportal/starlight",
     replace: ".devportal/starlight/",

@@ -3,7 +3,7 @@
   "private": true,
   "workspaces": ["packages/**"],
   "scripts": {
-    "dev": "npm run build --workspace astro-github-loader && npm run dev --workspace docs",
-    "build": "npm run build --workspace astro-github-loader && npm run build --workspace docs"
+    "dev": "npm run build --workspace @larkiny/astro-github-loader && npm run dev --workspace docs",
+    "build": "npm run build --workspace @larkiny/astro-github-loader && npm run build --workspace docs"
   }
 }

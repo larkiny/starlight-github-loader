@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "clean": "rm -rf src/content/docs/algokit src/content/docs/references src/content/docs/typedoc .astro",
+    "clean": "rm -rf src/content/docs/StaticDocs src/content/docs/StaticDocs/references src/content/docs/typedoc .astro",
     "lint": "eslint .",
     "prettier": "prettier --check .",
     "preview": "astro preview",

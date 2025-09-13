@@ -189,3 +189,61 @@ export interface Loader extends AstroLoader {
   /** Do the actual loading of the data */
   load: (context: LoaderContext) => Promise<void>;
 }
+
+/**
+ * Represents a single file entry in the sync manifest
+ */
+export interface ManifestEntry {
+  /** File path within the repository */
+  path: string;
+  /** Local file system path */
+  localPath: string;
+  /** Last modified timestamp from GitHub */
+  lastModified?: string;
+  /** ETag from GitHub response */
+  etag?: string;
+  /** Content digest for change detection */
+  digest?: string;
+}
+
+/**
+ * Manifest file tracking synced content
+ */
+export interface SyncManifest {
+  /** Map of file IDs to their manifest entries */
+  files: Record<string, ManifestEntry>;
+  /** Timestamp of last sync operation */
+  lastSync: string;
+  /** Configuration hash to detect config changes */
+  configHash?: string;
+}
+
+/**
+ * Plan for synchronizing files
+ */
+export interface SyncPlan {
+  /** Files to be added (new files) */
+  toAdd: ManifestEntry[];
+  /** Files to be updated (changed files) */
+  toUpdate: ManifestEntry[];
+  /** Files to be deleted (no longer exist remotely) */
+  toDelete: ManifestEntry[];
+  /** Files that haven't changed (skip processing) */
+  unchanged: ManifestEntry[];
+}
+
+/**
+ * Statistics for a sync operation
+ */
+export interface SyncStats {
+  /** Number of files added */
+  added: number;
+  /** Number of files updated */
+  updated: number;
+  /** Number of files deleted */
+  deleted: number;
+  /** Number of files unchanged */
+  unchanged: number;
+  /** Total processing time in ms */
+  duration: number;
+}
