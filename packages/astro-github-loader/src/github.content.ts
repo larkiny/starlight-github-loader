@@ -384,11 +384,27 @@ export async function syncEntry(
     id,
   });
 
-  const res = await fetch(url, init);
+  let res = await fetch(url, init);
 
   if (res.status === 304) {
-    logger.info(`Skipping ${id} as it has not changed`);
-    return;
+    // Only skip if the local file actually exists
+    const relativePath = generatePath(options, id);
+    const filePath = pathToFileURL(relativePath);
+    
+    if (existsSync(fileURLToPath(filePath))) {
+      logger.info(`Skipping ${id} as it has not changed`);
+      return;
+    } else {
+      logger.info(`File ${id} missing locally, re-fetching despite 304`);
+      // File is missing locally, fetch without ETag headers
+      const freshInit = { ...init };
+      freshInit.headers = new Headers(init.headers);
+      freshInit.headers.delete('If-None-Match');
+      freshInit.headers.delete('If-Modified-Since');
+      
+      res = await fetch(url, freshInit);
+      if (!res.ok) throw new Error(res.statusText);
+    }
   }
   if (!res.ok) throw new Error(res.statusText);
   let contents = await res.text();
