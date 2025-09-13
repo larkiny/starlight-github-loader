@@ -36,7 +36,7 @@ const REMOTE_CONTENT: ImportOptions[] = [
     assetsPath: "src/assets/imports/algokit-cli",
     assetsBaseUrl: "~/assets/imports/algokit-cli",
     assetPatterns: [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"],
-    clear: true,
+    clear: false,
     enabled: true,
   },
 ];
