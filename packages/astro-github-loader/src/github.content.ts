@@ -46,9 +46,30 @@ export function applyFileRename(filePath: string, options: ImportOptions): strin
     return filePath;
   }
 
-  // Find matching rename rule
-  const rename = options.fileRenames.find(r => r.from === filePath);
+  // Find matching rename rule - try both with and without extension
+  let rename = options.fileRenames.find(r => r.from === filePath);
+  
+  if (!rename) {
+    // If no direct match, try matching with extension added
+    const filePathWithExt = `${filePath}.md`;
+    rename = options.fileRenames.find(r => r.from === filePathWithExt);
+  }
+  
+  if (!rename) {
+    // If still no match, try matching without extension
+    const lastDotIndex = filePath.lastIndexOf('.');
+    if (lastDotIndex > 0) {
+      const filePathWithoutExt = filePath.substring(0, lastDotIndex);
+      rename = options.fileRenames.find(r => r.from === filePathWithoutExt);
+    }
+  }
+  
   if (rename) {
+    // Remove extension from the target if it has one, since generatePath will add it back
+    const lastDotIndex = rename.to.lastIndexOf('.');
+    if (lastDotIndex > 0) {
+      return rename.to.substring(0, lastDotIndex);
+    }
     return rename.to;
   }
 
