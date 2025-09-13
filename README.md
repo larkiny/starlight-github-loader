@@ -1,39 +1,55 @@
-# Starlight Github Loader
+# Astro GitHub Loader
 
-Loads content from a remote resource on Github and adds it to a content collection
+Load content from GitHub repositories into Astro content collections with asset management, content transformations, and intelligent change detection.
+
+## Features
+
+- 🔄 **Smart Content Import** - Import markdown and other content from any GitHub repository
+- 🖼️ **Asset Management** - Automatically download and transform asset references in markdown files
+- 🛠️ **Content Transforms** - Apply custom transformations to content during import
+- 🎯 **File Filtering** - Use glob patterns to include/exclude specific files
+- ⚡ **Change Detection** - Built-in dry-run mode to check for repository changes without importing
+- 🔒 **Stable Imports** - Non-destructive approach that preserves local content collections
+
+## Quick Start
 
 ```typescript
 import { defineCollection } from "astro:content";
 import { docsLoader } from "@astrojs/starlight/loaders";
 import { docsSchema } from "@astrojs/starlight/schema";
 import { Octokit } from "octokit";
-import { githubLoader } from "./github.loader";
-import type { ImportOptions } from "./github.types";
-import type { LoaderContext } from "./github.types";
+import { githubLoader } from "@larkiny/astro-github-loader";
+import type { ImportOptions, LoaderContext } from "@larkiny/astro-github-loader";
 
-const FIXTURES: ImportOptions[] = [
+const REMOTE_CONTENT: ImportOptions[] = [
   {
-    owner: "awesome-algorand",
-    repo: "algokit-cli",
-    ref: "docs/starlight-preview",
-    path: ".devportal/starlight",
-    replace: ".devportal/starlight/",
-    basePath: "src/content/docs",
+    name: "Documentation",
+    owner: "your-org",
+    repo: "your-docs-repo", 
+    ref: "main",
+    path: "docs",
+    basePath: "src/content/docs/imported",
+    clear: false, // Recommended: prevents content collection invalidation
   },
 ];
 
 const octokit = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
+
 export const collections = {
   docs: defineCollection({
     loader: {
-      name: "github-starlight",
+      name: "docs",
       load: async (context) => {
         await docsLoader().load(context);
-        await githubLoader({
-          octokit,
-          configs: FIXTURES,
-          clear: true, // Clear directories and content store before importing
-        }).load(context as LoaderContext);
+        
+        for (const config of REMOTE_CONTENT) {
+          await githubLoader({
+            octokit,
+            configs: [config],
+            clear: config.clear,
+            dryRun: false, // Set to true for change detection only
+          }).load(context as LoaderContext);
+        }
       },
     },
     schema: docsSchema(),
@@ -41,20 +57,13 @@ export const collections = {
 };
 ```
 
-## Using Content Transformers
+## Content Transformations
 
-You can apply transformations to content before it's processed by adding a `transforms` array to your configuration:
+Apply custom transformations to content during import using the `transforms` array:
 
 ```typescript
-import { defineCollection } from "astro:content";
-import { docsLoader } from "@astrojs/starlight/loaders";
-import { docsSchema } from "@astrojs/starlight/schema";
-
-import { Octokit } from "octokit";
-
-import { githubLoader } from "./github.loader";
-import type { RootOptions, TransformFunction } from "./github.types";
-import type { LoaderContext } from "./github.types";
+import { githubLoader } from "@larkiny/astro-github-loader";
+import type { TransformFunction } from "@larkiny/astro-github-loader";
 
 // Define transformation functions
 const addFrontmatter: TransformFunction = (content, context) => {
@@ -70,93 +79,40 @@ const removeInternalComments: TransformFunction = (content) => {
   return content.replace(/<!-- INTERNAL.*?-->/gs, "");
 };
 
-const FIXTURES_WITH_TRANSFORMS: ImportOptions[] = [
+const REMOTE_CONTENT_WITH_TRANSFORMS: ImportOptions[] = [
   {
-    owner: "awesome-algorand",
-    repo: "algokit-cli",
-    ref: "docs/starlight-preview",
-    path: ".devportal/starlight",
-    replace: ".devportal/starlight/",
-    basePath: "src/content/docs",
-    transforms: [removeInternalComments, addFrontmatter],
+    name: "Docs with Transforms",
+    owner: "your-org",
+    repo: "docs-repo",
+    path: "documentation",
+    basePath: "src/content/docs/imported",
+    clear: false,
+    transforms: [removeInternalComments, addFrontmatter], // Applied in order
   },
 ];
 
-const octokit = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
-export const collections = {
-  docs: defineCollection({
-    loader: {
-      name: "github-starlight",
-      load: async (context) => {
-        await docsLoader().load(context);
-        await githubLoader({
-          octokit,
-          configs: FIXTURES_WITH_TRANSFORMS,
-          clear: false,
-        }).load(context as LoaderContext);
-      },
-    },
-    schema: docsSchema(),
-  }),
-};
+// Use in your content collection as shown in Quick Start
 ```
 
 ## Asset Import and Management
 
-The loader can automatically detect, download, and transform asset references (images, etc.) in your markdown files. This is useful when your GitHub repository contains images that are referenced in markdown files:
+Automatically detect, download, and transform asset references in your markdown files:
 
 ```typescript
-import { defineCollection } from "astro:content";
-import { docsLoader } from "@astrojs/starlight/loaders";
-import { docsSchema } from "@astrojs/starlight/schema";
-
-import { Octokit } from "octokit";
-
-import { githubLoader } from "./github.loader";
-import type { ImportOptions } from "./github.types";
-import type { LoaderContext } from "./github.types";
-
-const FIXTURES_WITH_ASSETS: ImportOptions[] = [
+const REMOTE_CONTENT_WITH_ASSETS: ImportOptions[] = [
   {
-    owner: "awesome-algorand",
-    repo: "algokit-cli",
-    ref: "docs/starlight-preview",
-    path: ".devportal/starlight",
-    replace: ".devportal/starlight/",
-    basePath: "src/content/docs",
+    name: "Docs with Assets",
+    owner: "your-org",
+    repo: "docs-repo",
+    path: "documentation",
+    basePath: "src/content/docs/imported",
+    clear: false,
     // Asset configuration for automatic image handling
-    assetsPath: "src/assets/docs",
-    assetsBaseUrl: "/assets/docs",
-    assetPatterns: [
-      ".png",
-      ".jpg",
-      ".jpeg",
-      ".gif",
-      ".svg",
-      ".webp",
-      ".ico",
-      ".bmp",
-    ],
+    assetsPath: "src/assets/imported",
+    assetsBaseUrl: "~/assets/imported", // or "/assets/imported"
+    assetPatterns: [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"],
   },
 ];
-
-const octokit = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
-export const collections = {
-  docs: defineCollection({
-    loader: {
-      name: "github-starlight-with-assets",
-      load: async (context) => {
-        await docsLoader().load(context);
-        await githubLoader({
-          octokit,
-          configs: FIXTURES_WITH_ASSETS,
-          clear: false,
-        }).load(context as LoaderContext);
-      },
-    },
-    schema: docsSchema(),
-  }),
-};
 ```
 
 ### Asset Configuration Options
@@ -172,143 +128,207 @@ When enabled, the loader will:
 3. Save them locally to the specified `assetsPath` directory
 4. Transform the markdown references to use the local paths with `assetsBaseUrl`
 
-For example, a markdown reference like `![Diagram](./images/flow-chart.png)` would be automatically transformed to `![Diagram](/assets/docs/flow-chart-1641234567890.png)` and the image file would be downloaded and saved locally.
+For example, `![Diagram](./images/flow-chart.png)` becomes `![Diagram](~/assets/imported/flow-chart-1641234567890.png)` with the image downloaded locally.
 
-## Selective File Import with Include/Exclude Patterns
+## File Management Strategy
 
-You can control which files are imported from the repository using glob patterns. This is useful when you only want to import specific files or need to exclude certain files (like drafts or internal documentation):
+This loader uses a **non-destructive approach** to prevent Astro content collection invalidation:
+
+### Why `clear: false` is Recommended
+
+- **Prevents collection invalidation**: Mass file deletions can cause Astro to invalidate entire content collections, leading to 404 errors
+- **Preserves stability**: Your site remains functional even during partial imports
+- **Handles updates gracefully**: New and modified files are imported/updated automatically via ETag caching
+
+### Handling Deleted Files
+
+Since files aren't automatically deleted, you'll need to manually clean up when remote files are removed:
+
+1. **Check for changes** using the dry-run feature (see below)
+2. **Delete target import folders** for repositories that need updates
+3. **Re-import** with a fresh import
+
+This approach trades automatic cleanup for guaranteed stability.
+
+## Change Detection & Dry-Run Mode
+
+Use the dry-run feature to check for repository changes without importing:
 
 ```typescript
-import { defineCollection } from "astro:content";
-import { docsLoader } from "@astrojs/starlight/loaders";
-import { docsSchema } from "@astrojs/starlight/schema";
-import { Octokit } from "octokit";
-import { githubLoader } from "astro-github-loader";
-import type { ImportOptions } from "astro-github-loader";
-
-const GITHUB_API_CLIENT = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
-
-const REMOTE_CONTENT_WITH_FILTERING: ImportOptions[] = [
-  {
-    name: "AlgoKit CLI Docs",
-    owner: "awesome-algorand",
-    repo: "algokit-cli",
-    ref: "docs/starlight-preview",
-    path: ".devportal/starlight",
-    replace: ".devportal/starlight/",
-    basePath: "src/content/docs",
-    // Only include specific patterns
-    include: [
-      "arc-*.md", // All ARC files
-      "important.md", // Specific file
-      "guides/**/*.md", // All markdown files in guides directory
-    ],
-    // Exclude certain patterns
-    exclude: [
-      "**/draft-*.md", // Any draft files in any directory
-      "internal/**", // Entire internal directory
-      "*.temp.md", // Temporary files
-    ],
-    enabled: true,
-    clear: false,
-  },
-];
-
-export const collections = {
-  docs: defineCollection({
-    loader: {
-      name: "docs",
-      load: async (context) => {
-        await docsLoader().load(context);
-
-        for (const config of REMOTE_CONTENT_WITH_FILTERING) {
-          if (!config.enabled) continue;
-
-          try {
-            console.log(
-              `📥 Loading ${config.name} (clear: ${config.clear})...`
-            );
-            await githubLoader({
-              octokit: GITHUB_API_CLIENT,
-              configs: [config],
-              clear: config.clear,
-            }).load(context);
-            console.log(`✅ ${config.name} loaded successfully`);
-          } catch (error) {
-            console.error(`❌ Error loading ${config.name}:`, error);
-          }
-        }
-      },
-    },
-    schema: docsSchema(),
-  }),
-};
+// In your content config
+await githubLoader({
+  octokit,
+  configs: REMOTE_CONTENT,
+  clear: false,
+  dryRun: process.env.IMPORT_DRY_RUN === 'true', // Enable via environment variable
+}).load(context);
 ```
 
-### Include/Exclude Pattern Rules
+### Setting up Dry-Run Scripts
 
-The filtering follows these priority rules:
+Add to your `package.json`:
 
-1. **No patterns specified** → All files are imported (default behavior)
-2. **Exclude patterns only** → All files except those matching exclude patterns
-3. **Include patterns only** → Only files matching include patterns
-4. **Both include and exclude** → Include matching files, but exclude takes precedence
-
-### Pattern Examples
-
-```typescript
+```json
 {
-  // Include only ARC standards and readme files
-  include: ["arc-*.md", "**/README.md"],
-
-  // Exclude draft files and internal directories
-  exclude: ["**/draft-*", "internal/**", "*.temp.*"],
-
-  // Complex filtering: include guides but exclude drafts
-  include: ["guides/**/*.md"],
-  exclude: ["**/draft-*.md", "**/*.draft.md"]
+  "scripts": {
+    "import:check": "IMPORT_DRY_RUN=true astro sync"
+  }
 }
 ```
 
-### Supported Glob Patterns
-
-The loader uses [picomatch](https://github.com/micromatch/picomatch) for pattern matching, which supports:
-
-- `*` - matches any characters except `/`
-- `**` - matches any characters including `/` (for nested directories)
-- `?` - matches a single character
-- `[abc]` - matches any character in the set
-- `{a,b,c}` - matches any of the alternatives
-
-The module is not published yet, but you can try the loader out by following the Get Started Guide
-
-## Get Started
-
-Clone the repository
+### Dry-Run Output
 
 ```bash
-git clone git@github.com:awesome-algorand/starlight-github-loader.git
+npm run import:check
+
+# Output:
+📊 Repository Import Status:
+✅ Documentation: Up to date
+   Last imported: 2 hours ago
+🔄 API Reference: Needs re-import  
+   Latest commit: Add new endpoints
+   Committed: 30 minutes ago
+   Last imported: 1 day ago
+
+📈 Summary: 1 of 2 repositories need re-import, 0 errors
+
+💡 To import updated repositories:
+1. Delete the target import folders for repositories that need re-import
+2. Run the import process normally (dryRun: false)  
+3. Fresh content will be imported automatically
 ```
 
-Change to the project directory
+### Change Detection Features
 
-```bash
-cd starlight-github-loader
+- **Commit-based tracking**: Compares latest commit SHA with last import
+- **State persistence**: Maintains `.github-import-state.json` for tracking
+- **Comprehensive detection**: Catches all changes (new, modified, deleted, renamed files)
+- **Fast execution**: Single API call per repository
+
+## Configuration Options
+
+### ImportOptions Interface
+
+```typescript
+interface ImportOptions {
+  /** Display name for this configuration (used in logging) */
+  name?: string;
+  
+  /** GitHub repository owner */
+  owner: string;
+  
+  /** GitHub repository name */  
+  repo: string;
+  
+  /** Git reference (branch, tag, or commit SHA) */
+  ref?: string; // defaults to "main"
+  
+  /** Path within the repository to import from */
+  path?: string; // defaults to repository root
+  
+  /** String to remove from generated file paths */
+  replace?: string;
+  
+  /** Local directory where content should be imported */
+  basePath?: string;
+  
+  /** Whether this configuration is enabled */
+  enabled?: boolean; // defaults to true
+  
+  /** Whether to clear content store (recommend: false) */
+  clear?: boolean; // defaults to false
+  
+  /** Array of transform functions to apply to content */
+  transforms?: TransformFunction[];
+  
+  /** Asset management options */
+  assetsPath?: string; // Local directory for downloaded assets
+  assetsBaseUrl?: string; // Base URL for asset references
+  assetPatterns?: string[]; // File extensions to treat as assets
+  
+  /** File filtering options */
+  include?: string[]; // Glob patterns for files to include
+  exclude?: string[]; // Glob patterns for files to exclude
+}
 ```
 
-Install the dependencies
+### GithubLoaderOptions Interface
+
+```typescript
+interface GithubLoaderOptions {
+  /** Octokit instance for GitHub API access */
+  octokit: Octokit;
+  
+  /** Array of import configurations */
+  configs: ImportOptions[];
+  
+  /** Whether to clear content store (recommend: false) */
+  clear?: boolean; // defaults to false
+  
+  /** Enable dry-run mode for change detection only */
+  dryRun?: boolean; // defaults to false
+  
+  /** Fetch options for HTTP requests */
+  fetchOptions?: RequestInit;
+}
+```
+
+## File Filtering with Include/Exclude
+
+Control which files are imported using glob patterns:
+
+```typescript
+const FILTERED_CONTENT: ImportOptions[] = [
+  {
+    name: "Filtered Documentation",
+    owner: "your-org", 
+    repo: "docs",
+    basePath: "src/content/docs/imported",
+    // Only include specific patterns
+    include: [
+      "guides/**/*.md", // All markdown files in guides directory
+      "api-*.md", // Files starting with "api-"
+      "**/README.md", // README files in any directory
+    ],
+    // Exclude certain patterns  
+    exclude: [
+      "**/draft-*.md", // Any draft files
+      "internal/**", // Entire internal directory
+      "*.temp.*", // Temporary files
+    ],
+  },
+];
+```
+
+**Pattern Rules:**
+1. No patterns → All files imported
+2. Include only → Only matching files imported
+3. Exclude only → All files except excluded ones
+4. Both → Include files, but exclude takes precedence
+
+## Installation & Setup
 
 ```bash
+npm install @larkiny/astro-github-loader octokit
+```
+
+Set up your GitHub token in `.env`:
+
+```bash
+GITHUB_TOKEN=your_github_token_here
+```
+
+## Development
+
+Clone and run the example:
+
+```bash
+git clone https://github.com/larkiny/starlight-github-loader-fork.git
+cd starlight-github-loader-fork
 npm install
-```
-
-Run the example Starlight site
-
-```bash
 npm run dev
 ```
 
-## About
+## License
 
-This was created during the [2025 Algorand Developer Retreat](https://github.com/Algorand-Developer-Retreat) as a
-way to help manage the developer documentation in the Algorand/Algokit ecosystems!
+MIT - See LICENSE file for details.
