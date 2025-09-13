@@ -18,13 +18,16 @@ import { docsLoader } from "@astrojs/starlight/loaders";
 import { docsSchema } from "@astrojs/starlight/schema";
 import { Octokit } from "octokit";
 import { githubLoader } from "@larkiny/astro-github-loader";
-import type { ImportOptions, LoaderContext } from "@larkiny/astro-github-loader";
+import type {
+  ImportOptions,
+  LoaderContext,
+} from "@larkiny/astro-github-loader";
 
 const REMOTE_CONTENT: ImportOptions[] = [
   {
     name: "Documentation",
     owner: "your-org",
-    repo: "your-docs-repo", 
+    repo: "your-docs-repo",
     ref: "main",
     path: "docs",
     basePath: "src/content/docs/imported",
@@ -40,7 +43,7 @@ export const collections = {
       name: "docs",
       load: async (context) => {
         await docsLoader().load(context);
-        
+
         for (const config of REMOTE_CONTENT) {
           await githubLoader({
             octokit,
@@ -159,7 +162,7 @@ await githubLoader({
   octokit,
   configs: REMOTE_CONTENT,
   clear: false,
-  dryRun: process.env.IMPORT_DRY_RUN === 'true', // Enable via environment variable
+  dryRun: process.env.IMPORT_DRY_RUN === "true", // Enable via environment variable
 }).load(context);
 ```
 
@@ -184,7 +187,7 @@ npm run import:check
 📊 Repository Import Status:
 ✅ Documentation: Up to date
    Last imported: 2 hours ago
-🔄 API Reference: Needs re-import  
+🔄 API Reference: Needs re-import
    Latest commit: Add new endpoints
    Committed: 30 minutes ago
    Last imported: 1 day ago
@@ -193,7 +196,7 @@ npm run import:check
 
 💡 To import updated repositories:
 1. Delete the target import folders for repositories that need re-import
-2. Run the import process normally (dryRun: false)  
+2. Run the import process normally (dryRun: false)
 3. Fresh content will be imported automatically
 ```
 
@@ -212,39 +215,38 @@ npm run import:check
 interface ImportOptions {
   /** Display name for this configuration (used in logging) */
   name?: string;
-  
+
   /** GitHub repository owner */
   owner: string;
-  
-  /** GitHub repository name */  
+
+  /** GitHub repository name */
   repo: string;
-  
+
   /** Git reference (branch, tag, or commit SHA) */
   ref?: string; // defaults to "main"
-  
+
   /** Path within the repository to import from */
   path?: string; // defaults to repository root
-  
+
   /** String to remove from generated file paths */
   replace?: string;
-  
+
   /** Local directory where content should be imported */
   basePath?: string;
-  
+
   /** Whether this configuration is enabled */
   enabled?: boolean; // defaults to true
-  
+
   /** Whether to clear content store (recommend: false) */
   clear?: boolean; // defaults to false
-  
+
   /** Array of transform functions to apply to content */
   transforms?: TransformFunction[];
-  
+
   /** Asset management options */
   assetsPath?: string; // Local directory for downloaded assets
   assetsBaseUrl?: string; // Base URL for asset references
   assetPatterns?: string[]; // File extensions to treat as assets
-  
 }
 ```
 
@@ -254,21 +256,20 @@ interface ImportOptions {
 interface GithubLoaderOptions {
   /** Octokit instance for GitHub API access */
   octokit: Octokit;
-  
+
   /** Array of import configurations */
   configs: ImportOptions[];
-  
+
   /** Whether to clear content store (recommend: false) */
   clear?: boolean; // defaults to false
-  
+
   /** Enable dry-run mode for change detection only */
   dryRun?: boolean; // defaults to false
-  
+
   /** Fetch options for HTTP requests */
   fetchOptions?: RequestInit;
 }
 ```
-
 
 ## Installation & Setup
 
