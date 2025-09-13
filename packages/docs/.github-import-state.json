@@ -1,0 +1,12 @@
+{
+  "imports": {
+    "larkiny/algokit-cli-docs/.devportal/starlight@docs/starlight-preview": {
+      "name": "Algokit CLI Docs",
+      "repoId": "larkiny/algokit-cli-docs/.devportal/starlight@docs/starlight-preview",
+      "lastCommitSha": "4f8c1f8473c93d4c16bcc9f7cea73991174ced12",
+      "lastImported": "2025-09-13T09:15:20.672Z",
+      "ref": "docs/starlight-preview"
+    }
+  },
+  "lastChecked": "2025-09-13T09:13:26.336Z"
+}

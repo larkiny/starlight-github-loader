@@ -1,5 +1,6 @@
 import { toCollectionEntry } from "./github.content.js";
 import { performSelectiveCleanup } from "./github.cleanup.js";
+import { performDryRun, displayDryRunResults, updateImportState } from "./github.dryrun.js";
 
 import type {
   Loader,
@@ -51,11 +52,30 @@ export function githubLoader({
   configs,
   fetchOptions = {},
   clear = false,
+  dryRun = false,
 }: GithubLoaderOptions): Loader {
   return {
     name: "github-loader",
     load: async (context) => {
       const { store, logger } = context;
+      
+      if (dryRun) {
+        logger.info("🔍 Dry run mode enabled - checking for changes only");
+        
+        try {
+          const results = await performDryRun(configs, context, octokit);
+          displayDryRunResults(results, logger);
+          
+          logger.info("\n🚫 Dry run complete - no imports performed");
+          logger.info("💡 Set dryRun: false to perform actual imports");
+          
+          return; // Exit without importing
+        } catch (error: any) {
+          logger.error(`Dry run failed: ${error.message}`);
+          throw error;
+        }
+      }
+
       logger.debug(`Loading data from ${configs.length} sources`);
 
       // Always use standard processing - no file deletions to avoid Astro issues
@@ -66,14 +86,34 @@ export function githubLoader({
       }
       
       await Promise.all(
-        configs.map((config) =>
-          toCollectionEntry({
+        configs.map(async (config) => {
+          // Perform the import
+          await toCollectionEntry({
             context,
             octokit,
             options: config,
             fetchOptions,
-          })
-        )
+          });
+
+          // Update state tracking for future dry runs
+          try {
+            // Get the latest commit info to track state
+            const { data } = await octokit.rest.repos.listCommits({
+              owner: config.owner,
+              repo: config.repo,
+              sha: config.ref || 'main',
+              path: config.path || undefined,
+              per_page: 1
+            });
+            
+            if (data.length > 0) {
+              await updateImportState(process.cwd(), config, data[0].sha);
+            }
+          } catch (error) {
+            // Don't fail the import if state tracking fails
+            logger.debug(`Failed to update import state for ${config.name || `${config.owner}/${config.repo}`}: ${error}`);
+          }
+        })
       );
     },
   };

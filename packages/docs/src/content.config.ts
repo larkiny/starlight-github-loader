@@ -28,6 +28,7 @@ const REMOTE_CONTENT: ImportOptions[] = [
 
 const IMPORT_REMOTE = true;
 const GITHUB_API_CLIENT = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
+const IS_DRY_RUN = process.env.IMPORT_DRY_RUN === 'true';
 
 export const collections = {
   docs: defineCollection({
@@ -50,6 +51,7 @@ export const collections = {
                 octokit: GITHUB_API_CLIENT,
                 configs: [config],
                 clear: config.clear,
+                dryRun: IS_DRY_RUN,
               }).load(context as LoaderContext);
               console.log(`✅ ${config.name} loaded successfully`);
             } catch (error) {

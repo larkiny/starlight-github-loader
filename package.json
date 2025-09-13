@@ -1,9 +1,12 @@
 {
   "name": "astro-toolkit",
   "private": true,
-  "workspaces": ["packages/**"],
+  "workspaces": [
+    "packages/**"
+  ],
   "scripts": {
     "dev": "npm run build --workspace @larkiny/astro-github-loader && npm run dev --workspace docs",
-    "build": "npm run build --workspace @larkiny/astro-github-loader && npm run build --workspace docs"
+    "build": "npm run build --workspace @larkiny/astro-github-loader && npm run build --workspace docs",
+    "import:dry-run": "IMPORT_DRY_RUN=true astro sync --workspace docs"
   }
 }

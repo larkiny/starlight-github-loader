@@ -33,6 +33,12 @@ export type GithubLoaderOptions = {
   gitIgnore?: string;
   basePath?: string;
   fetchOptions?: FetchOptions;
+  /** 
+   * When true, only checks for repository changes without importing.
+   * Returns a report of which repositories have new commits.
+   * @default false
+   */
+  dryRun?: boolean;
 };
 
 /**
