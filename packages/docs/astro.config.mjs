@@ -20,6 +20,10 @@ export default defineConfig({
         }),
       ],
       sidebar: [
+        {
+          label: "Static Docs",
+          autogenerate: { directory: "StaticDocs" },
+        },
         typeDocSidebarGroup,
         {
           label: "Getting Started",
