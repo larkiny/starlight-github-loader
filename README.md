@@ -7,7 +7,6 @@ Load content from GitHub repositories into Astro content collections with asset 
 - 🔄 **Smart Content Import** - Import markdown and other content from any GitHub repository
 - 🖼️ **Asset Management** - Automatically download and transform asset references in markdown files
 - 🛠️ **Content Transforms** - Apply custom transformations to content during import
-- 🎯 **File Filtering** - Use glob patterns to include/exclude specific files
 - ⚡ **Change Detection** - Built-in dry-run mode to check for repository changes without importing
 - 🔒 **Stable Imports** - Non-destructive approach that preserves local content collections
 
@@ -246,9 +245,6 @@ interface ImportOptions {
   assetsBaseUrl?: string; // Base URL for asset references
   assetPatterns?: string[]; // File extensions to treat as assets
   
-  /** File filtering options */
-  include?: string[]; // Glob patterns for files to include
-  exclude?: string[]; // Glob patterns for files to exclude
 }
 ```
 
@@ -273,38 +269,6 @@ interface GithubLoaderOptions {
 }
 ```
 
-## File Filtering with Include/Exclude
-
-Control which files are imported using glob patterns:
-
-```typescript
-const FILTERED_CONTENT: ImportOptions[] = [
-  {
-    name: "Filtered Documentation",
-    owner: "your-org", 
-    repo: "docs",
-    basePath: "src/content/docs/imported",
-    // Only include specific patterns
-    include: [
-      "guides/**/*.md", // All markdown files in guides directory
-      "api-*.md", // Files starting with "api-"
-      "**/README.md", // README files in any directory
-    ],
-    // Exclude certain patterns  
-    exclude: [
-      "**/draft-*.md", // Any draft files
-      "internal/**", // Entire internal directory
-      "*.temp.*", // Temporary files
-    ],
-  },
-];
-```
-
-**Pattern Rules:**
-1. No patterns → All files imported
-2. Include only → Only matching files imported
-3. Exclude only → All files except excluded ones
-4. Both → Include files, but exclude takes precedence
 
 ## Installation & Setup
 

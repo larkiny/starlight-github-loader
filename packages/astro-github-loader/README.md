@@ -1,21 +1,14 @@
-# @larkiny/astro-github-loader
+# Astro GitHub Loader
 
 Load content from GitHub repositories into Astro content collections with asset management, content transformations, and intelligent change detection.
 
 ## Features
 
 - 🔄 **Smart Content Import** - Import markdown and other content from any GitHub repository
-- 🖼️ **Asset Management** - Automatically download and transform asset references in markdown files  
+- 🖼️ **Asset Management** - Automatically download and transform asset references in markdown files
 - 🛠️ **Content Transforms** - Apply custom transformations to content during import
-- 🎯 **File Filtering** - Use glob patterns to include/exclude specific files
 - ⚡ **Change Detection** - Built-in dry-run mode to check for repository changes without importing
 - 🔒 **Stable Imports** - Non-destructive approach that preserves local content collections
-
-## Installation
-
-```bash
-npm install @larkiny/astro-github-loader octokit
-```
 
 ## Quick Start
 
@@ -31,7 +24,7 @@ const REMOTE_CONTENT: ImportOptions[] = [
   {
     name: "Documentation",
     owner: "your-org",
-    repo: "your-docs-repo",
+    repo: "your-docs-repo", 
     ref: "main",
     path: "docs",
     basePath: "src/content/docs/imported",
@@ -39,7 +32,7 @@ const REMOTE_CONTENT: ImportOptions[] = [
   },
 ];
 
-const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+const octokit = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
 
 export const collections = {
   docs: defineCollection({
@@ -65,11 +58,13 @@ export const collections = {
 
 ## Content Transformations
 
-Apply custom transformations to content during import:
+Apply custom transformations to content during import using the `transforms` array:
 
 ```typescript
+import { githubLoader } from "@larkiny/astro-github-loader";
 import type { TransformFunction } from "@larkiny/astro-github-loader";
 
+// Define transformation functions
 const addFrontmatter: TransformFunction = (content, context) => {
   const title = context.path.replace(/\.(md|mdx)$/, "").replace(/\//g, " ");
   return `---
@@ -79,41 +74,60 @@ source: ${context.options.owner}/${context.options.repo}
 ${content}`;
 };
 
-const CONTENT_WITH_TRANSFORMS: ImportOptions[] = [
+const removeInternalComments: TransformFunction = (content) => {
+  return content.replace(/<!-- INTERNAL.*?-->/gs, "");
+};
+
+const REMOTE_CONTENT_WITH_TRANSFORMS: ImportOptions[] = [
   {
     name: "Docs with Transforms",
     owner: "your-org",
     repo: "docs-repo",
+    path: "documentation",
     basePath: "src/content/docs/imported",
-    transforms: [addFrontmatter],
+    clear: false,
+    transforms: [removeInternalComments, addFrontmatter], // Applied in order
   },
 ];
+
+// Use in your content collection as shown in Quick Start
 ```
 
 ## Asset Import and Management
 
-Automatically detect, download, and transform asset references:
+Automatically detect, download, and transform asset references in your markdown files:
 
 ```typescript
-const CONTENT_WITH_ASSETS: ImportOptions[] = [
+const REMOTE_CONTENT_WITH_ASSETS: ImportOptions[] = [
   {
     name: "Docs with Assets",
     owner: "your-org",
     repo: "docs-repo",
+    path: "documentation",
     basePath: "src/content/docs/imported",
-    // Asset configuration
+    clear: false,
+    // Asset configuration for automatic image handling
     assetsPath: "src/assets/imported",
-    assetsBaseUrl: "~/assets/imported",
+    assetsBaseUrl: "~/assets/imported", // or "/assets/imported"
     assetPatterns: [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"],
   },
 ];
 ```
 
-**What happens:**
-1. Parse markdown files for image references like `![alt](./images/diagram.png)`
-2. Download referenced assets from GitHub repository
-3. Save them locally to the specified `assetsPath` directory  
-4. Transform markdown references to use local paths with `assetsBaseUrl`
+### Asset Configuration Options
+
+- **`assetsPath`**: Local directory where downloaded assets will be stored (e.g., `"src/assets/docs"`)
+- **`assetsBaseUrl`**: Base URL prefix for asset references in transformed markdown (e.g., `"/assets/docs"`)
+- **`assetPatterns`**: Array of file extensions to treat as assets (defaults to common image formats if not specified)
+
+When enabled, the loader will:
+
+1. Parse markdown files for image references like `![alt](./images/diagram.png)` or `<img src="../assets/logo.svg">`
+2. Download the referenced assets from the GitHub repository
+3. Save them locally to the specified `assetsPath` directory
+4. Transform the markdown references to use the local paths with `assetsBaseUrl`
+
+For example, `![Diagram](./images/flow-chart.png)` becomes `![Diagram](~/assets/imported/flow-chart-1641234567890.png)` with the image downloaded locally.
 
 ## File Management Strategy
 
@@ -129,21 +143,23 @@ This loader uses a **non-destructive approach** to prevent Astro content collect
 
 Since files aren't automatically deleted, you'll need to manually clean up when remote files are removed:
 
-1. **Check for changes** using the dry-run feature
-2. **Delete target import folders** for repositories that need updates  
+1. **Check for changes** using the dry-run feature (see below)
+2. **Delete target import folders** for repositories that need updates
 3. **Re-import** with a fresh import
 
 This approach trades automatic cleanup for guaranteed stability.
 
 ## Change Detection & Dry-Run Mode
 
-Use dry-run mode to check for repository changes without importing:
+Use the dry-run feature to check for repository changes without importing:
 
 ```typescript
+// In your content config
 await githubLoader({
   octokit,
   configs: REMOTE_CONTENT,
-  dryRun: process.env.IMPORT_DRY_RUN === 'true',
+  clear: false,
+  dryRun: process.env.IMPORT_DRY_RUN === 'true', // Enable via environment variable
 }).load(context);
 ```
 
@@ -168,7 +184,7 @@ npm run import:check
 📊 Repository Import Status:
 ✅ Documentation: Up to date
    Last imported: 2 hours ago
-🔄 API Reference: Needs re-import
+🔄 API Reference: Needs re-import  
    Latest commit: Add new endpoints
    Committed: 30 minutes ago
    Last imported: 1 day ago
@@ -177,9 +193,16 @@ npm run import:check
 
 💡 To import updated repositories:
 1. Delete the target import folders for repositories that need re-import
-2. Run the import process normally (dryRun: false)
+2. Run the import process normally (dryRun: false)  
 3. Fresh content will be imported automatically
 ```
+
+### Change Detection Features
+
+- **Commit-based tracking**: Compares latest commit SHA with last import
+- **State persistence**: Maintains `.github-import-state.json` for tracking
+- **Comprehensive detection**: Catches all changes (new, modified, deleted, renamed files)
+- **Fast execution**: Single API call per repository
 
 ## Configuration Options
 
@@ -187,25 +210,40 @@ npm run import:check
 
 ```typescript
 interface ImportOptions {
-  name?: string;          // Display name for logging
-  owner: string;          // GitHub repository owner
-  repo: string;           // GitHub repository name
-  ref?: string;           // Git reference (defaults to "main")
-  path?: string;          // Path within repository
-  replace?: string;       // String to remove from file paths
-  basePath?: string;      // Local directory for content
-  enabled?: boolean;      // Whether configuration is enabled
-  clear?: boolean;        // Whether to clear content store (recommend: false)
-  transforms?: TransformFunction[]; // Content transformation functions
+  /** Display name for this configuration (used in logging) */
+  name?: string;
   
-  // Asset management
-  assetsPath?: string;    // Local directory for assets
+  /** GitHub repository owner */
+  owner: string;
+  
+  /** GitHub repository name */  
+  repo: string;
+  
+  /** Git reference (branch, tag, or commit SHA) */
+  ref?: string; // defaults to "main"
+  
+  /** Path within the repository to import from */
+  path?: string; // defaults to repository root
+  
+  /** String to remove from generated file paths */
+  replace?: string;
+  
+  /** Local directory where content should be imported */
+  basePath?: string;
+  
+  /** Whether this configuration is enabled */
+  enabled?: boolean; // defaults to true
+  
+  /** Whether to clear content store (recommend: false) */
+  clear?: boolean; // defaults to false
+  
+  /** Array of transform functions to apply to content */
+  transforms?: TransformFunction[];
+  
+  /** Asset management options */
+  assetsPath?: string; // Local directory for downloaded assets
   assetsBaseUrl?: string; // Base URL for asset references
   assetPatterns?: string[]; // File extensions to treat as assets
-  
-  // File filtering
-  include?: string[];     // Glob patterns for files to include
-  exclude?: string[];     // Glob patterns for files to exclude
 }
 ```
 
@@ -213,45 +251,46 @@ interface ImportOptions {
 
 ```typescript
 interface GithubLoaderOptions {
-  octokit: Octokit;       // GitHub API client
-  configs: ImportOptions[]; // Array of import configurations
-  clear?: boolean;        // Clear content store (recommend: false)
-  dryRun?: boolean;       // Enable dry-run mode (defaults to false)
-  fetchOptions?: RequestInit; // HTTP request options
+  /** Octokit instance for GitHub API access */
+  octokit: Octokit;
+  
+  /** Array of import configurations */
+  configs: ImportOptions[];
+  
+  /** Whether to clear content store (recommend: false) */
+  clear?: boolean; // defaults to false
+  
+  /** Enable dry-run mode for change detection only */
+  dryRun?: boolean; // defaults to false
+  
+  /** Fetch options for HTTP requests */
+  fetchOptions?: RequestInit;
 }
 ```
 
-## File Filtering
+## Installation & Setup
 
-Control which files are imported using glob patterns:
-
-```typescript
-const FILTERED_CONTENT: ImportOptions[] = [
-  {
-    name: "Filtered Documentation",
-    owner: "your-org",
-    repo: "docs",
-    basePath: "src/content/docs/imported",
-    include: [
-      "guides/**/*.md",     // All markdown files in guides directory
-      "api-*.md",           // Files starting with "api-"
-      "**/README.md",       // README files in any directory
-    ],
-    exclude: [
-      "**/draft-*.md",      // Any draft files
-      "internal/**",        // Entire internal directory
-      "*.temp.*",           // Temporary files
-    ],
-  },
-];
+```bash
+npm install @larkiny/astro-github-loader octokit
 ```
 
-**Pattern Rules:**
-1. No patterns → All files imported
-2. Include only → Only matching files imported
-3. Exclude only → All files except excluded ones
-4. Both → Include files, but exclude takes precedence
+Set up your GitHub token in `.env`:
+
+```bash
+GITHUB_TOKEN=your_github_token_here
+```
+
+## Development
+
+Clone and run the example:
+
+```bash
+git clone https://github.com/larkiny/starlight-github-loader-fork.git
+cd starlight-github-loader-fork
+npm install
+npm run dev
+```
 
 ## License
 
-MIT
+MIT - See LICENSE file for details.
