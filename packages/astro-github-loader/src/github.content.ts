@@ -35,6 +35,27 @@ export function generateId(options: ImportOptions) {
 }
 
 /**
+ * Applies file renaming rules to a path if configured
+ * @param filePath - Original file path relative to repository
+ * @param options - Import options containing fileRenames configuration  
+ * @returns Renamed path if rule matches, otherwise original path
+ * @internal
+ */
+export function applyFileRename(filePath: string, options: ImportOptions): string {
+  if (!options.fileRenames || options.fileRenames.length === 0) {
+    return filePath;
+  }
+
+  // Find matching rename rule
+  const rename = options.fileRenames.find(r => r.from === filePath);
+  if (rename) {
+    return rename.to;
+  }
+
+  return filePath;
+}
+
+/**
  * Generates a path based on the provided options and optional identifier.
  *
  * @param {RootOptions} options - An object containing configuration for path generation.
@@ -45,11 +66,14 @@ export function generateId(options: ImportOptions) {
  */
 export function generatePath(options: ImportOptions, id?: string) {
   if (typeof id === "string") {
+    // Apply file renaming if configured
+    const renamedId = applyFileRename(id, options);
+    
     // Preserve original file extension from options.path
     const originalPath = options.path || "";
     const lastDotIndex = originalPath.lastIndexOf('.');
     const extension = lastDotIndex > 0 ? originalPath.substring(lastDotIndex) : '.md';
-    return `${options.basePath ? `${options.basePath}/` : ""}${id}${extension}`;
+    return `${options.basePath ? `${options.basePath}/` : ""}${renamedId}${extension}`;
   }
   return options.path || "";
 }

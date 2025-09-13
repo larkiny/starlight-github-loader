@@ -21,6 +21,9 @@ const REMOTE_CONTENT: ImportOptions[] = [
     assetsPath: "src/assets/imports/algokit-cli",
     assetsBaseUrl: "~/assets/imports/algokit-cli",
     assetPatterns: [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"],
+    fileRenames: [
+      { from: "references/index.mdx", to: "references/overview.mdx" },
+    ],
     clear: false,
     enabled: true,
   },
@@ -28,7 +31,7 @@ const REMOTE_CONTENT: ImportOptions[] = [
 
 const IMPORT_REMOTE = true;
 const GITHUB_API_CLIENT = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
-const IS_DRY_RUN = process.env.IMPORT_DRY_RUN === 'true';
+const IS_DRY_RUN = process.env.IMPORT_DRY_RUN === "true";
 
 export const collections = {
   docs: defineCollection({

@@ -96,6 +96,44 @@ const REMOTE_CONTENT_WITH_TRANSFORMS: ImportOptions[] = [
 // Use in your content collection as shown in Quick Start
 ```
 
+## File Renaming
+
+Rename files during import to organize content according to your site structure:
+
+```typescript
+import type { FileRename } from "@larkiny/astro-github-loader";
+
+const REMOTE_CONTENT_WITH_RENAMES: ImportOptions[] = [
+  {
+    name: "Documentation with Renames",
+    owner: "your-org",
+    repo: "docs-repo",
+    path: "docs",
+    basePath: "src/content/docs/imported",
+    clear: false,
+    fileRenames: [
+      { from: "README.md", to: "index.md" },
+      { from: "getting-started.md", to: "guides/quick-start.md" },
+      { from: "advanced/config.md", to: "configuration.md" },
+    ],
+  },
+];
+```
+
+### File Rename Rules
+
+- **`from`**: Source path relative to the repository path being imported
+- **`to`**: Destination path relative to the basePath where file will be saved
+- Files are matched exactly by their path - no glob patterns supported
+- Directories in the `to` path will be created automatically
+- Files not matching any rename rules maintain their original paths
+
+This feature is perfect for:
+- Converting README files to index pages
+- Reorganizing content structure during import  
+- Consolidating nested documentation into flatter hierarchies
+- Renaming files to match your site's URL structure
+
 ## Asset Import and Management
 
 Automatically detect, download, and transform asset references in your markdown files:
@@ -247,6 +285,9 @@ interface ImportOptions {
   assetsPath?: string; // Local directory for downloaded assets
   assetsBaseUrl?: string; // Base URL for asset references
   assetPatterns?: string[]; // File extensions to treat as assets
+  
+  /** File rename configurations */
+  fileRenames?: FileRename[]; // Array of from/to path mappings
 }
 ```
 
