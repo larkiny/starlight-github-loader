@@ -56,6 +56,48 @@ export const collections = {
 };
 ```
 
+## Selective Content Import
+
+Control which files are imported using the `ignores` option to skip specific files or directories:
+
+```typescript
+const REMOTE_CONTENT: ImportOptions[] = [
+  {
+    name: "Docs with Selective Import",
+    owner: "your-org", 
+    repo: "your-docs-repo",
+    path: "docs",
+    basePath: "src/content/docs/imported",
+    ignores: [
+      // Ignore entire directories  
+      "api/**/*",           // Skip all files in the api directory
+      "internal/**/*",      // Skip internal documentation
+      "temp/**/*",          // Skip temporary files
+      
+      // Ignore specific file patterns
+      "**/*.test.md",       // Skip test files anywhere
+      "**/*.draft.md",      // Skip draft files
+      "**/TODO.md",         // Skip TODO files
+      
+      // Ignore specific files
+      "old-readme.md",      // Skip specific file
+      "deprecated.md",      // Skip deprecated content
+    ],
+  },
+];
+```
+
+### Common Ignore Patterns
+
+- **`directory/**/*`** - Ignore entire directory and all subdirectories
+- **`**/*.extension`** - Ignore all files with specific extension anywhere  
+- **`**/filename.md`** - Ignore specific filename in any directory
+- **`filename.md`** - Ignore specific file in root path only
+- **`prefix-*`** - Ignore files starting with prefix
+- **`*-suffix.md`** - Ignore files ending with suffix
+
+The `ignores` option uses [picomatch](https://github.com/micromatch/picomatch) for glob pattern matching, supporting all standard glob patterns.
+
 ## Content Transformations
 
 Apply custom transformations to content during import using the `transforms` array:
@@ -277,6 +319,9 @@ interface ImportOptions {
   
   /** Array of transform functions to apply to content */
   transforms?: TransformFunction[];
+  
+  /** Files and directories to ignore during import (glob patterns supported) */
+  ignores?: string[]; // e.g., ['temp/**/*', '**/*.test.md', 'old-file.md']
   
   /** Asset management options */
   assetsPath?: string; // Local directory for downloaded assets

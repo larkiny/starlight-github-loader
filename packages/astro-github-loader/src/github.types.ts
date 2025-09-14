@@ -174,15 +174,10 @@ export type ImportOptions = {
    */
   transforms?: TransformFunction[];
   /**
-   * Array of glob patterns or specific file paths to include (relative to path)
-   * If specified, only matching files will be imported
+   * Array of glob patterns or specific file paths to ignore (relative to path)
+   * Files matching these patterns will be skipped during import
    */
-  include?: string[];
-  /**
-   * Array of glob patterns or specific file paths to exclude (relative to path)
-   * Files matching these patterns will be skipped
-   */
-  exclude?: string[];
+  ignores?: string[];
   /**
    * Array of file rename configurations to apply during import
    * Files will be saved to the renamed path relative to basePath

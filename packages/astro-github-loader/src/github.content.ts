@@ -126,36 +126,23 @@ export async function syncFile(path: string, content: string) {
 const DEFAULT_ASSET_PATTERNS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp'];
 
 /**
- * Checks if a file path should be included based on include/exclude patterns
+ * Checks if a file path should be included based on ignore patterns
  * @param filePath - The file path to check (relative to the repository root)
- * @param options - Import options containing include/exclude patterns
+ * @param options - Import options containing ignores patterns
  * @returns true if file should be included, false otherwise
  * @internal
  */
 export function shouldIncludeFile(filePath: string, options: ImportOptions): boolean {
-  const { include, exclude } = options;
+  const { ignores } = options;
   
-  // If no include/exclude patterns specified, include all files
-  if (!include && !exclude) {
+  // If no ignore patterns specified, include all files
+  if (!ignores || ignores.length === 0) {
     return true;
   }
   
-  // Check exclude patterns first - if any match, exclude the file
-  if (exclude && exclude.length > 0) {
-    const excludeMatchers = exclude.map(pattern => picomatch(pattern));
-    if (excludeMatchers.some(matcher => matcher(filePath))) {
-      return false;
-    }
-  }
-  
-  // If include patterns are specified, file must match at least one
-  if (include && include.length > 0) {
-    const includeMatchers = include.map(pattern => picomatch(pattern));
-    return includeMatchers.some(matcher => matcher(filePath));
-  }
-  
-  // If only exclude patterns were specified and none matched, include the file
-  return true;
+  // Check if file matches any ignore pattern
+  const ignoreMatchers = ignores.map(pattern => picomatch(pattern));
+  return !ignoreMatchers.some(matcher => matcher(filePath));
 }
 
 /**
