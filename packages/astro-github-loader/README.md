@@ -1,14 +1,15 @@
 # Astro GitHub Loader
 
-Load content from GitHub repositories into Astro content collections with asset management, content transformations, and intelligent change detection.
+Load content from GitHub repositories into Astro content collections with flexible pattern-based import, asset management, content transformations, and intelligent change detection.
 
 ## Features
 
-- 🔄 **Smart Content Import** - Import markdown and other content from any GitHub repository
+- 🎯 **Pattern-Based Import** - Use glob patterns to selectively import content with per-pattern configuration
 - 🖼️ **Asset Management** - Automatically download and transform asset references in markdown files
-- 🛠️ **Content Transforms** - Apply custom transformations to content during import
+- 🛠️ **Content Transforms** - Apply custom transformations to content during import, with pattern-specific transforms
 - ⚡ **Change Detection** - Built-in dry-run mode to check for repository changes without importing
 - 🔒 **Stable Imports** - Non-destructive approach that preserves local content collections
+- 🚀 **Optimized Performance** - Smart directory scanning to minimize GitHub API calls
 
 ## Quick Start
 
@@ -18,16 +19,23 @@ import { docsLoader } from "@astrojs/starlight/loaders";
 import { docsSchema } from "@astrojs/starlight/schema";
 import { Octokit } from "octokit";
 import { githubLoader } from "@larkiny/astro-github-loader";
-import type { ImportOptions, LoaderContext } from "@larkiny/astro-github-loader";
+import type {
+  ImportOptions,
+  LoaderContext,
+} from "@larkiny/astro-github-loader";
 
 const REMOTE_CONTENT: ImportOptions[] = [
   {
     name: "Documentation",
     owner: "your-org",
-    repo: "your-docs-repo", 
+    repo: "your-docs-repo",
     ref: "main",
-    path: "docs",
-    basePath: "src/content/docs/imported",
+    includes: [
+      {
+        pattern: "docs/**/*.md",
+        basePath: "src/content/docs/imported",
+      },
+    ],
     clear: false, // Recommended: prevents content collection invalidation
   },
 ];
@@ -40,7 +48,7 @@ export const collections = {
       name: "docs",
       load: async (context) => {
         await docsLoader().load(context);
-        
+
         for (const config of REMOTE_CONTENT) {
           await githubLoader({
             octokit,
@@ -56,126 +64,144 @@ export const collections = {
 };
 ```
 
-## Selective Content Import
+## Pattern-Based Import System
 
-Control which files are imported using the `ignores` option to skip specific files or directories:
+The new `includes` system allows you to define multiple import patterns, each with its own destination path and transforms:
 
 ```typescript
 const REMOTE_CONTENT: ImportOptions[] = [
   {
-    name: "Docs with Selective Import",
-    owner: "your-org", 
+    name: "Multi-Pattern Import",
+    owner: "your-org",
     repo: "your-docs-repo",
-    path: "docs",
-    basePath: "src/content/docs/imported",
-    ignores: [
-      // Ignore entire directories  
-      "api/**/*",           // Skip all files in the api directory
-      "internal/**/*",      // Skip internal documentation
-      "temp/**/*",          // Skip temporary files
-      
-      // Ignore specific file patterns
-      "**/*.test.md",       // Skip test files anywhere
-      "**/*.draft.md",      // Skip draft files
-      "**/TODO.md",         // Skip TODO files
-      
-      // Ignore specific files
-      "old-readme.md",      // Skip specific file
-      "deprecated.md",      // Skip deprecated content
+    includes: [
+      // Import main documentation
+      {
+        pattern: "docs/**/*.md",
+        basePath: "src/content/docs/guides",
+        transforms: [addGuideMetadata],
+      },
+      // Import API reference to different location
+      {
+        pattern: "api-reference/**/*.md",
+        basePath: "src/content/docs/api",
+        transforms: [addApiMetadata, formatApiDocs],
+      },
+      // Import specific files
+      {
+        pattern: "README.md",
+        basePath: "src/content/docs",
+        transforms: [convertReadmeToOverview],
+      },
     ],
   },
 ];
 ```
 
-### Common Ignore Patterns
+### Pattern Features
 
-- **`directory/**/*`** - Ignore entire directory and all subdirectories
-- **`**/*.extension`** - Ignore all files with specific extension anywhere  
-- **`**/filename.md`** - Ignore specific filename in any directory
-- **`filename.md`** - Ignore specific file in root path only
-- **`prefix-*`** - Ignore files starting with prefix
-- **`*-suffix.md`** - Ignore files ending with suffix
+- **Glob patterns**: Use `**/*.md`, `docs/guides/*.md`, specific files, etc.
+- **Per-pattern basePath**: Each pattern can target a different local directory
+- **Per-pattern transforms**: Apply different transformations to different content types
+- **Directory structure preservation**: Relative paths within patterns are preserved
 
-The `ignores` option uses [picomatch](https://github.com/micromatch/picomatch) for glob pattern matching, supporting all standard glob patterns.
+### Common Pattern Examples
+
+- **`**/\*.md`\*\* - All markdown files in the repository
+- **`docs/**/\*`\*\* - All files in the docs directory and subdirectories
+- **`guides/*.md`** - Only markdown files directly in the guides directory
+- **`api-reference/**/\*.{md,mdx}`\*\* - Markdown and MDX files in api-reference
+- **`README.md`** - Specific file at repository root
+- **`docs/getting-started.md`** - Specific file at specific path
 
 ## Content Transformations
 
-Apply custom transformations to content during import using the `transforms` array:
+Apply transformations globally or per-pattern:
 
 ```typescript
 import { githubLoader } from "@larkiny/astro-github-loader";
 import type { TransformFunction } from "@larkiny/astro-github-loader";
 
-// Define transformation functions
-const addFrontmatter: TransformFunction = (content, context) => {
-  const title = context.path.replace(/\.(md|mdx)$/, "").replace(/\//g, " ");
+// Global transform functions
+const addImportMetadata: TransformFunction = (content, context) => {
   return `---
-title: ${title}
-source: ${context.options.owner}/${context.options.repo}
+imported_from: ${context.options.owner}/${context.options.repo}
+original_path: ${context.path}
+imported_at: ${new Date().toISOString()}
 ---
 ${content}`;
 };
 
-const removeInternalComments: TransformFunction = (content) => {
-  return content.replace(/<!-- INTERNAL.*?-->/gs, "");
+// Pattern-specific transform
+const addApiDocsBadge: TransformFunction = (content, context) => {
+  const lines = content.split("\n");
+  const frontmatterEnd = lines.findIndex((line, i) => i > 0 && line === "---");
+  if (frontmatterEnd > 0) {
+    lines.splice(frontmatterEnd, 0, "sidebar:", '  badge: "API"');
+  }
+  return lines.join("\n");
 };
 
-const REMOTE_CONTENT_WITH_TRANSFORMS: ImportOptions[] = [
+const REMOTE_CONTENT: ImportOptions[] = [
   {
     name: "Docs with Transforms",
     owner: "your-org",
     repo: "docs-repo",
-    path: "documentation",
-    basePath: "src/content/docs/imported",
-    clear: false,
-    transforms: [removeInternalComments, addFrontmatter], // Applied in order
-  },
-];
-
-// Use in your content collection as shown in Quick Start
-```
-
-## File Renaming
-
-Rename files during import to organize content according to your site structure:
-
-```typescript
-import type { FileRename } from "@larkiny/astro-github-loader";
-
-const REMOTE_CONTENT_WITH_RENAMES: ImportOptions[] = [
-  {
-    name: "Documentation with Renames",
-    owner: "your-org",
-    repo: "docs-repo",
-    path: "docs",
-    basePath: "src/content/docs/imported",
-    clear: false,
-    fileRenames: [
-      { from: "README.md", to: "index.md" },
-      { from: "getting-started.md", to: "guides/quick-start.md" },
-      { from: "advanced/config.md", to: "configuration.md" },
+    // Global transforms applied to all includes
+    transforms: [addImportMetadata],
+    includes: [
+      {
+        pattern: "docs/**/*.md",
+        basePath: "src/content/docs/guides",
+        // These transforms are applied in addition to global ones
+        transforms: [addGuideFormatting],
+      },
+      {
+        pattern: "api/**/*.md",
+        basePath: "src/content/docs/api",
+        transforms: [addApiDocsBadge, formatApiContent],
+      },
     ],
   },
 ];
 ```
 
-### File Rename Rules
+## Link Transformation Utilities
 
-- **`from`**: Source path relative to the repository path being imported
-- **`to`**: Destination path relative to the basePath where file will be saved
-- Files are matched exactly by their path - no glob patterns supported
-- Directories in the `to` path will be created automatically
-- Files not matching any rename rules maintain their original paths
+Handle markdown links with anchor fragments using built-in utilities:
 
-This feature is perfect for:
-- Converting README files to index pages
-- Reorganizing content structure during import  
-- Consolidating nested documentation into flatter hierarchies
-- Renaming files to match your site's URL structure
+```typescript
+import {
+  createLinkTransform,
+  extractAnchor,
+  removeMarkdownExtension,
+} from "@larkiny/astro-github-loader";
+
+const linkTransform = createLinkTransform({
+  baseUrl: "/docs/imported",
+  pathTransform: (path, context) => {
+    const { path: cleanPath, anchor } = extractAnchor(path);
+
+    // Custom link handling logic
+    if (cleanPath === "README.md") {
+      return `/docs/imported/overview${anchor}`;
+    }
+
+    // Use utility to remove .md extension and preserve anchors
+    return `/docs/imported/${removeMarkdownExtension(path)}`;
+  },
+});
+```
+
+### Link Transform Utilities
+
+- **`extractAnchor(path)`** - Returns `{path, anchor}` separating the anchor fragment
+- **`removeMarkdownExtension(path)`** - Removes `.md`/`.mdx` extensions while preserving anchors
+- **`createLinkTransform(options)`** - Main transform with custom path handling
 
 ## Asset Import and Management
 
-Automatically detect, download, and transform asset references in your markdown files:
+Automatically detect, download, and transform asset references:
 
 ```typescript
 const REMOTE_CONTENT_WITH_ASSETS: ImportOptions[] = [
@@ -183,10 +209,13 @@ const REMOTE_CONTENT_WITH_ASSETS: ImportOptions[] = [
     name: "Docs with Assets",
     owner: "your-org",
     repo: "docs-repo",
-    path: "documentation",
-    basePath: "src/content/docs/imported",
-    clear: false,
-    // Asset configuration for automatic image handling
+    includes: [
+      {
+        pattern: "documentation/**/*.md",
+        basePath: "src/content/docs/imported",
+      },
+    ],
+    // Asset configuration
     assetsPath: "src/assets/imported",
     assetsBaseUrl: "~/assets/imported", // or "/assets/imported"
     assetPatterns: [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"],
@@ -194,44 +223,30 @@ const REMOTE_CONTENT_WITH_ASSETS: ImportOptions[] = [
 ];
 ```
 
-### Asset Configuration Options
+### Asset Management Features
 
-- **`assetsPath`**: Local directory where downloaded assets will be stored (e.g., `"src/assets/docs"`)
-- **`assetsBaseUrl`**: Base URL prefix for asset references in transformed markdown (e.g., `"/assets/docs"`)
-- **`assetPatterns`**: Array of file extensions to treat as assets (defaults to common image formats if not specified)
-
-When enabled, the loader will:
-
-1. Parse markdown files for image references like `![alt](./images/diagram.png)` or `<img src="../assets/logo.svg">`
-2. Download the referenced assets from the GitHub repository
-3. Save them locally to the specified `assetsPath` directory
-4. Transform the markdown references to use the local paths with `assetsBaseUrl`
-
-For example, `![Diagram](./images/flow-chart.png)` becomes `![Diagram](~/assets/imported/flow-chart-1641234567890.png)` with the image downloaded locally.
+- **Automatic detection**: Finds image references in markdown
+- **Smart downloading**: Only downloads assets that have changed
+- **Path transformation**: Updates markdown to use local asset paths
+- **Multiple formats**: Supports various image formats
 
 ## File Management Strategy
 
-This loader uses a **non-destructive approach** to prevent Astro content collection invalidation:
-
-### Why `clear: false` is Recommended
-
-- **Prevents collection invalidation**: Mass file deletions can cause Astro to invalidate entire content collections, leading to 404 errors
-- **Preserves stability**: Your site remains functional even during partial imports
-- **Handles updates gracefully**: New and modified files are imported/updated automatically via ETag caching
-
-### Handling Deleted Files
-
-Since files aren't automatically deleted, you'll need to manually clean up when remote files are removed:
-
-1. **Check for changes** using the dry-run feature (see below)
-2. **Delete target import folders** for repositories that need updates
-3. **Re-import** with a fresh import
-
-This approach trades automatic cleanup for guaranteed stability.
+> **⚠️ Important: Do not use `clear: true`**
+>
+> The `clear: true` option should not be used with the current implementation due to how Astro content collection syncing works. Mass file deletions can cause Astro to invalidate entire content collections, leading to 404 errors and build instability.
+>
+> **Instead**: If you need to handle file deletions, renames, or path restructuring from the source repository:
+>
+> 1. Manually delete the local import folders (e.g., `src/content/docs/imported`)
+> 2. Re-run the import process
+> 3. Fresh content will be imported with the new structure
+>
+> This approach ensures your site remains stable while handling structural changes.
 
 ## Change Detection & Dry-Run Mode
 
-Use the dry-run feature to check for repository changes without importing:
+Check for repository changes without importing:
 
 ```typescript
 // In your content config
@@ -239,7 +254,7 @@ await githubLoader({
   octokit,
   configs: REMOTE_CONTENT,
   clear: false,
-  dryRun: process.env.IMPORT_DRY_RUN === 'true', // Enable via environment variable
+  dryRun: process.env.IMPORT_DRY_RUN === "true",
 }).load(context);
 ```
 
@@ -264,25 +279,11 @@ npm run import:check
 📊 Repository Import Status:
 ✅ Documentation: Up to date
    Last imported: 2 hours ago
-🔄 API Reference: Needs re-import  
+🔄 API Reference: Needs re-import
    Latest commit: Add new endpoints
    Committed: 30 minutes ago
    Last imported: 1 day ago
-
-📈 Summary: 1 of 2 repositories need re-import, 0 errors
-
-💡 To import updated repositories:
-1. Delete the target import folders for repositories that need re-import
-2. Run the import process normally (dryRun: false)  
-3. Fresh content will be imported automatically
 ```
-
-### Change Detection Features
-
-- **Commit-based tracking**: Compares latest commit SHA with last import
-- **State persistence**: Maintains `.github-import-state.json` for tracking
-- **Comprehensive detection**: Catches all changes (new, modified, deleted, renamed files)
-- **Fast execution**: Single API call per repository
 
 ## Configuration Options
 
@@ -292,67 +293,74 @@ npm run import:check
 interface ImportOptions {
   /** Display name for this configuration (used in logging) */
   name?: string;
-  
+
   /** GitHub repository owner */
   owner: string;
-  
-  /** GitHub repository name */  
+
+  /** GitHub repository name */
   repo: string;
-  
+
   /** Git reference (branch, tag, or commit SHA) */
   ref?: string; // defaults to "main"
-  
-  /** Path within the repository to import from */
-  path?: string; // defaults to repository root
-  
-  /** String to remove from generated file paths */
-  replace?: string;
-  
-  /** Local directory where content should be imported */
-  basePath?: string;
-  
+
   /** Whether this configuration is enabled */
   enabled?: boolean; // defaults to true
-  
+
   /** Whether to clear content store (recommend: false) */
   clear?: boolean; // defaults to false
-  
-  /** Array of transform functions to apply to content */
+
+  /** Array of transform functions applied to all includes */
   transforms?: TransformFunction[];
-  
-  /** Files and directories to ignore during import (glob patterns supported) */
-  ignores?: string[]; // e.g., ['temp/**/*', '**/*.test.md', 'old-file.md']
-  
+
+  /** Pattern-based import configuration */
+  includes?: IncludePattern[];
+
   /** Asset management options */
   assetsPath?: string; // Local directory for downloaded assets
   assetsBaseUrl?: string; // Base URL for asset references
   assetPatterns?: string[]; // File extensions to treat as assets
-  
-  /** File rename configurations */
-  fileRenames?: FileRename[]; // Array of from/to path mappings
+}
+
+interface IncludePattern {
+  /** Glob pattern to match files (relative to repository root) */
+  pattern: string;
+
+  /** Local base path where matching files should be imported */
+  basePath: string;
+
+  /** Transforms to apply only to files matching this pattern */
+  transforms?: TransformFunction[];
 }
 ```
 
-### GithubLoaderOptions Interface
+### Transform Function Interface
 
 ```typescript
-interface GithubLoaderOptions {
-  /** Octokit instance for GitHub API access */
-  octokit: Octokit;
-  
-  /** Array of import configurations */
-  configs: ImportOptions[];
-  
-  /** Whether to clear content store (recommend: false) */
-  clear?: boolean; // defaults to false
-  
-  /** Enable dry-run mode for change detection only */
-  dryRun?: boolean; // defaults to false
-  
-  /** Fetch options for HTTP requests */
-  fetchOptions?: RequestInit;
+interface TransformContext {
+  /** Generated ID for the content */
+  id: string;
+
+  /** File path within the repository */
+  path: string;
+
+  /** Full configuration options */
+  options: ImportOptions;
+
+  /** Information about which include pattern matched (if any) */
+  matchedPattern?: MatchedPattern;
 }
+
+type TransformFunction = (content: string, context: TransformContext) => string;
 ```
+
+## Performance Optimizations
+
+The loader includes several optimizations:
+
+- **Smart directory scanning**: Only scans directories that match include patterns
+- **Efficient API usage**: Minimizes GitHub API calls through targeted requests
+- **Change detection**: Uses ETags and manifest files to avoid unnecessary downloads
+- **Concurrent processing**: Downloads and processes files in parallel
 
 ## Installation & Setup
 
@@ -364,17 +372,6 @@ Set up your GitHub token in `.env`:
 
 ```bash
 GITHUB_TOKEN=your_github_token_here
-```
-
-## Development
-
-Clone and run the example:
-
-```bash
-git clone https://github.com/larkiny/starlight-github-loader-fork.git
-cd starlight-github-loader-fork
-npm install
-npm run dev
 ```
 
 ## License
