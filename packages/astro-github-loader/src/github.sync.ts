@@ -22,10 +22,8 @@ function createConfigHash(options: ImportOptions): string {
   const configForHashing = {
     owner: options.owner,
     repo: options.repo,
-    path: options.path,
     ref: options.ref,
-    ignores: options.ignores,
-    replace: options.replace
+    includes: options.includes
   };
   return createHash('md5').update(JSON.stringify(configForHashing)).digest('hex');
 }
@@ -81,8 +79,23 @@ async function discoverRemoteFiles(
   options: ImportOptions,
   signal?: AbortSignal
 ): Promise<Map<string, ManifestEntry>> {
-  const { owner, repo, path = "", ref = "main" } = options;
+  const { owner, repo, ref = "main" } = options;
   const files = new Map<string, ManifestEntry>();
+
+  // Get all unique directory prefixes from include patterns to limit scanning
+  const directoriesToScan = new Set<string>();
+  if (options.includes && options.includes.length > 0) {
+    for (const includePattern of options.includes) {
+      // Extract directory part from pattern (before any glob wildcards)
+      const pattern = includePattern.pattern;
+      const beforeGlob = pattern.split(/[*?{]/)[0];
+      const dirPart = beforeGlob.includes('/') ? beforeGlob.substring(0, beforeGlob.lastIndexOf('/')) : '';
+      directoriesToScan.add(dirPart);
+    }
+  } else {
+    // If no includes specified, scan from root
+    directoriesToScan.add('');
+  }
 
   async function processDirectory(dirPath: string) {
     try {
@@ -96,9 +109,10 @@ async function discoverRemoteFiles(
 
       if (!Array.isArray(data)) {
         // Single file
-        if (data.type === 'file' && shouldIncludeFile(data.path, options)) {
-          const id = generateId({ ...options, path: data.path });
-          const localPath = generatePath(options, id);
+        if (data.type === 'file' && shouldIncludeFile(data.path, options).included) {
+          const id = generateId(data.path);
+          const includeResult = shouldIncludeFile(data.path, options);
+          const localPath = generatePath(data.path, includeResult.included ? includeResult.matchedPattern : null);
           
           files.set(id, {
             path: data.path,
@@ -114,15 +128,16 @@ async function discoverRemoteFiles(
       const promises = data
         .filter(({ type, path }) => {
           if (type === "dir") return true;
-          if (type === "file") return shouldIncludeFile(path, options);
+          if (type === "file") return shouldIncludeFile(path, options).included;
           return false;
         })
         .map(async ({ type, path: itemPath }) => {
           if (type === "dir") {
             await processDirectory(itemPath);
           } else if (type === "file") {
-            const id = generateId({ ...options, path: itemPath });
-            const localPath = generatePath(options, id);
+            const id = generateId(itemPath);
+            const includeResult = shouldIncludeFile(itemPath, options);
+            const localPath = generatePath(itemPath, includeResult.included ? includeResult.matchedPattern : null);
             
             files.set(id, {
               path: itemPath,
@@ -139,7 +154,10 @@ async function discoverRemoteFiles(
     }
   }
 
-  await processDirectory(path);
+  // Process only the directories that match our include patterns
+  for (const dirPath of directoriesToScan) {
+    await processDirectory(dirPath);
+  }
   return files;
 }
 
@@ -239,7 +257,8 @@ async function executeSyncPlan(
       await syncEntry(
         context,
         { url: data.download_url, editUrl: data.url },
-        { ...options, path: entry.path, ref },
+        entry.path,
+        options,
         octokit,
         { signal }
       );
@@ -272,17 +291,18 @@ export async function performIncrementalSync(
 ): Promise<SyncStats> {
   const startTime = Date.now();
   const { logger } = context;
-  const configName = config.name || `${config.owner}/${config.repo}${config.path ? `:${config.path}` : ''}`;
+  const configName = config.name || `${config.owner}/${config.repo}`;
   
-  if (!config.basePath) {
-    throw new Error(`basePath is required for incremental sync in config: ${configName}`);
+  if (!config.includes || config.includes.length === 0) {
+    throw new Error(`includes patterns are required for incremental sync in config: ${configName}`);
   }
 
   logger.debug(`Starting incremental sync for ${configName}`);
 
   try {
-    // Load existing manifest
-    const manifest = await loadManifest(config.basePath);
+    // Load existing manifest (using first include pattern's base path)
+    const manifestPath = config.includes[0].basePath;
+    const manifest = await loadManifest(manifestPath);
     
     // Check if config changed (force full sync if it did)
     const currentConfigHash = createConfigHash(config);
@@ -309,7 +329,7 @@ export async function performIncrementalSync(
       configHash: currentConfigHash
     };
     
-    await saveManifest(config.basePath, newManifest);
+    await saveManifest(manifestPath, newManifest);
     
     const duration = Date.now() - startTime;
     const stats: SyncStats = {

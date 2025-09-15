@@ -7,6 +7,18 @@ import type {MarkdownHeading} from "@astrojs/markdown-remark";
 import {Octokit} from "octokit";
 
 /**
+ * Information about which include pattern matched a file
+ */
+export interface MatchedPattern {
+  /** The glob pattern that matched */
+  pattern: string;
+  /** The base path for this pattern */
+  basePath: string;
+  /** Index of the pattern in the includes array */
+  index: number;
+}
+
+/**
  * Context object passed to transform functions
  */
 export interface TransformContext {
@@ -16,6 +28,8 @@ export interface TransformContext {
   path: string;
   /** Full configuration options */
   options: ImportOptions;
+  /** Information about which include pattern matched (if any) */
+  matchedPattern?: MatchedPattern;
 }
 
 /**
@@ -27,14 +41,17 @@ export interface TransformContext {
 export type TransformFunction = (content: string, context: TransformContext) => string;
 
 /**
- * Configuration for renaming files during import
+ * Configuration for a single include pattern
  */
-export interface FileRename {
-  /** Source path relative to the repository path */
-  from: string;
-  /** Destination path relative to the basePath */
-  to: string;
+export interface IncludePattern {
+  /** Glob pattern to match files (relative to repository root) */
+  pattern: string;
+  /** Local base path where matching files should be imported */
+  basePath: string;
+  /** Transforms to apply only to files matching this pattern */
+  transforms?: TransformFunction[];
 }
+
 
 export type GithubLoaderOptions = {
   octokit: Octokit;
@@ -132,19 +149,6 @@ export type ImportOptions = {
    */
   repo: string;
   /**
-   * An optional string that specifies the replacement selector
-   */
-  replace?: string;
-  /**
-   * Represents the base path for constructing URLs or accessing a specific directory.
-   * This optional string value can be set to define the root path for operations that require a prefixed path.
-   */
-  basePath?: string;
-  /**
-   * The path relative to the repository name and owner
-   */
-  path?: string;
-  /**
    * A specific reference in Github
    */
   ref?: string;
@@ -170,19 +174,14 @@ export type ImportOptions = {
    */
   clear?: boolean;
   /**
-   * Array of transform functions to apply to content before processing
+   * Array of transform functions to apply to all imported content
    */
   transforms?: TransformFunction[];
   /**
-   * Array of glob patterns or specific file paths to ignore (relative to path)
-   * Files matching these patterns will be skipped during import
+   * Array of include patterns defining which files to import and where to put them
+   * If not specified, all files will be imported (backward compatibility mode)
    */
-  ignores?: string[];
-  /**
-   * Array of file rename configurations to apply during import
-   * Files will be saved to the renamed path relative to basePath
-   */
-  fileRenames?: FileRename[];
+  includes?: IncludePattern[];
 };
 
 export type FetchOptions = RequestInit & {

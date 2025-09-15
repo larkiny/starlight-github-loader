@@ -102,7 +102,6 @@ export function githubLoader({
               owner: config.owner,
               repo: config.repo,
               sha: config.ref || 'main',
-              path: config.path || undefined,
               per_page: 1
             });
             

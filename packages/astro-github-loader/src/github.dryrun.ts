@@ -55,8 +55,7 @@ export interface RepositoryChangeInfo {
  * Creates a unique identifier for an import configuration
  */
 function createConfigId(config: ImportOptions): string {
-  const repoPath = config.path ? `/${config.path}` : '';
-  return `${config.owner}/${config.repo}${repoPath}@${config.ref || 'main'}`;
+  return `${config.owner}/${config.repo}@${config.ref || 'main'}`;
 }
 
 /**
@@ -105,15 +104,14 @@ async function getLatestCommitInfo(
   config: ImportOptions,
   signal?: AbortSignal
 ): Promise<{ sha: string; message: string; date: string } | null> {
-  const { owner, repo, path = "", ref = "main" } = config;
+  const { owner, repo, ref = "main" } = config;
 
   try {
-    // Get commits for the specific path
+    // Get commits for the entire repository
     const { data } = await octokit.rest.repos.listCommits({
       owner,
       repo,
       sha: ref,
-      path: path || undefined,
       per_page: 1,
       request: { signal }
     });
@@ -130,7 +128,7 @@ async function getLatestCommitInfo(
     };
   } catch (error: any) {
     if (error.status === 404) {
-      throw new Error(`Repository or path not found: ${owner}/${repo}${path ? `:${path}` : ''}`);
+      throw new Error(`Repository not found: ${owner}/${repo}`);
     }
     throw error;
   }
@@ -145,7 +143,7 @@ async function checkRepositoryForChanges(
   currentState: ImportState,
   signal?: AbortSignal
 ): Promise<RepositoryChangeInfo> {
-  const configName = config.name || `${config.owner}/${config.repo}${config.path ? `:${config.path}` : ''}`;
+  const configName = config.name || `${config.owner}/${config.repo}`;
 
   try {
     const latestCommit = await getLatestCommitInfo(octokit, config, signal);
@@ -190,7 +188,7 @@ export async function updateImportState(
 ): Promise<void> {
   const state = await loadImportState(workingDir);
   const configId = createConfigId(config);
-  const configName = config.name || `${config.owner}/${config.repo}${config.path ? `:${config.path}` : ''}`;
+  const configName = config.name || `${config.owner}/${config.repo}`;
 
   state.imports[configId] = {
     name: configName,
@@ -229,7 +227,7 @@ export async function performDryRun(
     }
 
     const configId = createConfigId(config);
-    const configName = config.name || `${config.owner}/${config.repo}${config.path ? `:${config.path}` : ''}`;
+    const configName = config.name || `${config.owner}/${config.repo}`;
     
     // Get current state for this config
     const currentState: ImportState = state.imports[configId] || {

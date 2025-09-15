@@ -9,23 +9,17 @@ import {
   INVALID_URL_ERROR,
 } from "./github.constants.js";
 
-import type { LoaderContext, CollectionEntryOptions, ImportOptions, RenderedContent } from "./github.types.js";
+import type { LoaderContext, CollectionEntryOptions, ImportOptions, RenderedContent, MatchedPattern } from "./github.types.js";
 
 /**
- * Generates a unique identifier based on the given options.
- *
- * @param {RootOptions} options - The configuration object containing the path and replacement string.
- * @param {string} options.path - The file path used to generate the identifier, defaults to an empty string if absent.
- * @param {string} [options.replace] - Optional substring that will be removed from the identifier if present.
- * @return {string} The generated identifier with the specified transformations applied.
- *
+ * Generates a unique identifier from a file path by removing the extension
+ * @param filePath - The file path to generate ID from
+ * @return {string} The generated identifier as a string with extension removed
  * @internal
  */
-export function generateId(options: ImportOptions) {
-  let id = options.path || "";
-  if (typeof options.replace === "string") {
-    id = id.replace(options.replace, "");
-  }
+export function generateId(filePath: string): string {
+  let id = filePath;
+
   // Remove file extension for ID generation
   const lastDotIndex = id.lastIndexOf('.');
   if (lastDotIndex > 0) {
@@ -34,69 +28,40 @@ export function generateId(options: ImportOptions) {
   return id;
 }
 
-/**
- * Applies file renaming rules to a path if configured
- * @param filePath - Original file path relative to repository
- * @param options - Import options containing fileRenames configuration  
- * @returns Renamed path if rule matches, otherwise original path
- * @internal
- */
-export function applyFileRename(filePath: string, options: ImportOptions): string {
-  if (!options.fileRenames || options.fileRenames.length === 0) {
-    return filePath;
-  }
-
-  // Find matching rename rule - try both with and without extension
-  let rename = options.fileRenames.find(r => r.from === filePath);
-  
-  if (!rename) {
-    // If no direct match, try matching with extension added
-    const filePathWithExt = `${filePath}.md`;
-    rename = options.fileRenames.find(r => r.from === filePathWithExt);
-  }
-  
-  if (!rename) {
-    // If still no match, try matching without extension
-    const lastDotIndex = filePath.lastIndexOf('.');
-    if (lastDotIndex > 0) {
-      const filePathWithoutExt = filePath.substring(0, lastDotIndex);
-      rename = options.fileRenames.find(r => r.from === filePathWithoutExt);
-    }
-  }
-  
-  if (rename) {
-    // Remove extension from the target if it has one, since generatePath will add it back
-    const lastDotIndex = rename.to.lastIndexOf('.');
-    if (lastDotIndex > 0) {
-      return rename.to.substring(0, lastDotIndex);
-    }
-    return rename.to;
-  }
-
-  return filePath;
-}
 
 /**
- * Generates a path based on the provided options and optional identifier.
- *
- * @param {RootOptions} options - An object containing configuration for path generation.
- * @param {string} [id] - An optional identifier to append to the base path.
- * @return {string} The generated path as a string. Returns a modified path based on the identifier
- * provided or the base path configuration. Returns an empty string if no path can be generated.
+ * Generates a local file path based on the matched pattern and file path
+ * @param filePath - The original file path from the repository
+ * @param matchedPattern - The pattern that matched this file (or null if no includes specified)
+ * @return {string} The local file path where this content should be stored
  * @internal
  */
-export function generatePath(options: ImportOptions, id?: string) {
-  if (typeof id === "string") {
-    // Apply file renaming if configured
-    const renamedId = applyFileRename(id, options);
+export function generatePath(filePath: string, matchedPattern?: MatchedPattern | null): string {
+  if (matchedPattern) {
+    // Extract the directory part from the pattern (before any glob wildcards)
+    const pattern = matchedPattern.pattern;
+    const beforeGlob = pattern.split(/[*?{]/)[0];
     
-    // Preserve original file extension from options.path
-    const originalPath = options.path || "";
-    const lastDotIndex = originalPath.lastIndexOf('.');
-    const extension = lastDotIndex > 0 ? originalPath.substring(lastDotIndex) : '.md';
-    return `${options.basePath ? `${options.basePath}/` : ""}${renamedId}${extension}`;
+    // Remove the pattern prefix from the file path to get the relative path
+    let relativePath = filePath;
+    if (beforeGlob && filePath.startsWith(beforeGlob)) {
+      relativePath = filePath.substring(beforeGlob.length);
+      // Remove leading slash if present
+      if (relativePath.startsWith('/')) {
+        relativePath = relativePath.substring(1);
+      }
+    }
+    
+    // If no relative path remains, use just the filename
+    if (!relativePath) {
+      relativePath = basename(filePath);
+    }
+    
+    return join(matchedPattern.basePath, relativePath);
   }
-  return options.path || "";
+  
+  // Should not happen since we always use includes
+  throw new Error("No matched pattern provided - includes are required");
 }
 
 /**
@@ -126,23 +91,39 @@ export async function syncFile(path: string, content: string) {
 const DEFAULT_ASSET_PATTERNS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp'];
 
 /**
- * Checks if a file path should be included based on ignore patterns
+ * Checks if a file path should be included and returns the matching pattern
  * @param filePath - The file path to check (relative to the repository root)
- * @param options - Import options containing ignores patterns
- * @returns true if file should be included, false otherwise
+ * @param options - Import options containing includes patterns
+ * @returns Object with include status and matched pattern, or null if not included
  * @internal
  */
-export function shouldIncludeFile(filePath: string, options: ImportOptions): boolean {
-  const { ignores } = options;
+export function shouldIncludeFile(filePath: string, options: ImportOptions): { included: true; matchedPattern: MatchedPattern | null } | { included: false; matchedPattern: null } {
+  const { includes } = options;
   
-  // If no ignore patterns specified, include all files
-  if (!ignores || ignores.length === 0) {
-    return true;
+  // If no include patterns specified, include all files
+  if (!includes || includes.length === 0) {
+    return { included: true, matchedPattern: null };
   }
   
-  // Check if file matches any ignore pattern
-  const ignoreMatchers = ignores.map(pattern => picomatch(pattern));
-  return !ignoreMatchers.some(matcher => matcher(filePath));
+  // Check each include pattern to find a match
+  for (let i = 0; i < includes.length; i++) {
+    const includePattern = includes[i];
+    const matcher = picomatch(includePattern.pattern);
+    
+    if (matcher(filePath)) {
+      return {
+        included: true,
+        matchedPattern: {
+          pattern: includePattern.pattern,
+          basePath: includePattern.basePath,
+          index: i
+        }
+      };
+    }
+  }
+  
+  // No patterns matched
+  return { included: false, matchedPattern: null };
 }
 
 /**
@@ -284,11 +265,12 @@ function escapeRegExp(string: string): string {
  */
 async function processAssets(
   content: string,
+  filePath: string,
   options: ImportOptions,
   octokit: any,
   signal?: AbortSignal
 ): Promise<string> {
-  const { owner, repo, ref = 'main', path: basePath = '', assetsPath, assetsBaseUrl, assetPatterns } = options;
+  const { owner, repo, ref = 'main', assetsPath, assetsBaseUrl, assetPatterns } = options;
   
   if (!assetsPath || !assetsBaseUrl) {
     return content;
@@ -306,7 +288,7 @@ async function processAssets(
   await Promise.all(detectedAssets.map(async (assetPath) => {
     try {
       // Resolve the asset path relative to the current markdown file
-      const resolvedAssetPath = resolveAssetPath(basePath, assetPath);
+      const resolvedAssetPath = resolveAssetPath(filePath, assetPath);
       
       // Generate unique filename to avoid conflicts
       const originalFilename = basename(assetPath);
@@ -361,6 +343,7 @@ function resolveAssetPath(basePath: string, assetPath: string): string {
 export async function syncEntry(
   context: LoaderContext,
   { url, editUrl }: { url: string | URL | null; editUrl: string },
+  filePath: string,
   options: ImportOptions,
   octokit: any,
   init: RequestInit = {},
@@ -384,7 +367,7 @@ export async function syncEntry(
     return entryTypes?.get(`.${ext}`);
   }
   // Custom ID, TODO: Allow custom id generators
-  let id = generateId(options);
+  let id = generateId(filePath);
 
   init.headers = getHeaders({
     init: init.headers,
@@ -395,11 +378,12 @@ export async function syncEntry(
   let res = await fetch(url, init);
 
   if (res.status === 304) {
-    // Only skip if the local file actually exists
-    const relativePath = generatePath(options, id);
-    const filePath = pathToFileURL(relativePath);
+    // Only skip if the local file actually exists  
+    const includeResult = shouldIncludeFile(filePath, options);
+    const relativePath = generatePath(filePath, includeResult.included ? includeResult.matchedPattern : null);
+    const fileUrl = pathToFileURL(relativePath);
     
-    if (existsSync(fileURLToPath(filePath))) {
+    if (existsSync(fileURLToPath(fileUrl))) {
       logger.info(`Skipping ${id} as it has not changed`);
       return;
     } else {
@@ -416,18 +400,35 @@ export async function syncEntry(
   }
   if (!res.ok) throw new Error(res.statusText);
   let contents = await res.text();
-  const entryType = configForFile(options?.path || "tmp.md");
+  const entryType = configForFile(filePath || "tmp.md");
   if (!entryType) throw new Error("No entry type found");
 
-  // Apply content transforms if provided
+  // Apply content transforms if provided - both global and pattern-specific
+  const includeResultForTransforms = shouldIncludeFile(filePath, options);
+  const transformsToApply: any[] = [];
+  
+  // Add global transforms first
   if (options.transforms && options.transforms.length > 0) {
+    transformsToApply.push(...options.transforms);
+  }
+  
+  // Add pattern-specific transforms
+  if (includeResultForTransforms.included && includeResultForTransforms.matchedPattern && options.includes) {
+    const matchedInclude = options.includes[includeResultForTransforms.matchedPattern.index];
+    if (matchedInclude.transforms && matchedInclude.transforms.length > 0) {
+      transformsToApply.push(...matchedInclude.transforms);
+    }
+  }
+  
+  if (transformsToApply.length > 0) {
     const transformContext = {
       id,
-      path: options.path || "",
+      path: filePath,
       options,
+      matchedPattern: includeResultForTransforms.included ? includeResultForTransforms.matchedPattern : undefined,
     };
     
-    for (const transform of options.transforms) {
+    for (const transform of transformsToApply) {
       try {
         contents = transform(contents, transformContext);
       } catch (error) {
@@ -438,18 +439,19 @@ export async function syncEntry(
 
   // Process assets if configuration is provided
   if (options.assetsPath && options.assetsBaseUrl) {
-    await processAssets(contents, options, octokit, init.signal || undefined).then(transformedContent => {
+    await processAssets(contents, filePath, options, octokit, init.signal || undefined).then(transformedContent => {
       contents = transformedContent;
     }).catch(error => {
       logger.warn(`Asset processing failed for ${id}: ${error.message}`);
     });
   }
 
-  const relativePath = generatePath(options, id);
-  const filePath = pathToFileURL(relativePath);
+  const includeResult = shouldIncludeFile(filePath, options);
+  const relativePath = generatePath(filePath, includeResult.included ? includeResult.matchedPattern : null);
+  const fileUrl = pathToFileURL(relativePath);
   const { body, data } = await entryType.getEntryInfo({
     contents,
-    fileUrl: filePath,
+    fileUrl: fileUrl,
   });
 
   const existingEntry = store.get(id);
@@ -464,15 +466,15 @@ export async function syncEntry(
     return;
   }
   // Write file to path
-  if (!existsSync(fileURLToPath(filePath))) {
-    logger.info(`Writing ${id} to ${filePath}`);
-    await syncFile(fileURLToPath(filePath), contents);
+  if (!existsSync(fileURLToPath(fileUrl))) {
+    logger.info(`Writing ${id} to ${fileUrl}`);
+    await syncFile(fileURLToPath(fileUrl), contents);
   }
 
   const parsedData = await parseData({
     id,
     data,
-    filePath: filePath.toString(),
+    filePath: fileUrl.toString(),
   });
 
   if (entryType.getRenderFunction) {
@@ -484,7 +486,7 @@ export async function syncEntry(
         id,
         data,
         body,
-        filePath: filePath.toString(),
+        filePath: fileUrl.toString(),
         digest,
       });
     } catch (error: any) {
@@ -530,73 +532,97 @@ export async function toCollectionEntry({
   options,
   signal,
 }: CollectionEntryOptions) {
-  const { owner, repo, path = "", ref = "main" } = options || {};
+  const { owner, repo, ref = "main" } = options || {};
   if (typeof repo !== "string" || typeof owner !== "string")
     throw new TypeError(INVALID_STRING_ERROR);
 
-  // Fetch the content
-  const { data, status } = await octokit.rest.repos.getContent({
-    owner,
-    repo,
-    path,
-    ref,
-    request: { signal },
-  });
-  if (status !== 200) throw new Error(INVALID_SERVICE_RESPONSE);
-
-  // Matches for regular files
-  if (!Array.isArray(data)) {
-    const path = data.path;
-    switch (data.type) {
-      // Return
-      case "file":
-        return await syncEntry(
-          context,
-          { url: data.download_url, editUrl: data.url },
-          { ...options, path, ref },
-          octokit,
-          { signal },
-        );
-      default:
-        throw new Error("Invalid type");
+  // Get all unique directory prefixes from include patterns to limit scanning
+  const directoriesToScan = new Set<string>();
+  if (options.includes && options.includes.length > 0) {
+    for (const includePattern of options.includes) {
+      // Extract directory part from pattern (before any glob wildcards)
+      const pattern = includePattern.pattern;
+      const beforeGlob = pattern.split(/[*?{]/)[0];
+      const dirPart = beforeGlob.includes('/') ? beforeGlob.substring(0, beforeGlob.lastIndexOf('/')) : '';
+      directoriesToScan.add(dirPart);
     }
+  } else {
+    // If no includes specified, scan from root
+    directoriesToScan.add('');
   }
 
-  // Directory listing with filtering
-  const promises: Promise<any>[] = data
-    .filter(({ type, path }) => {
-      // Always include directories for recursion
-      if (type === "dir") return true;
-      // Apply filtering logic to files
-      if (type === "file") {
-        return shouldIncludeFile(path, options);
-      }
-      return false;
-    })
-    .map(({ type, path, download_url, url }) => {
-      switch (type) {
-        // Recurse
-        case "dir":
-          return toCollectionEntry({
-            context,
-            octokit,
-            options: { ...options, path, ref },
-            signal,
-          });
+  // Process each directory that matches our include patterns
+  const allPromises: Promise<any>[] = [];
+  
+  for (const dirPath of directoriesToScan) {
+    const promise = processDirectoryRecursively(dirPath);
+    allPromises.push(promise);
+  }
+  
+  return await Promise.all(allPromises);
+
+  async function processDirectoryRecursively(path: string): Promise<any> {
+    // Fetch the content
+    const { data, status } = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path,
+      ref,
+      request: { signal },
+    });
+    if (status !== 200) throw new Error(INVALID_SERVICE_RESPONSE);
+
+    // Matches for regular files
+    if (!Array.isArray(data)) {
+      const filePath = data.path;
+      switch (data.type) {
         // Return
         case "file":
-          return syncEntry(
+          return await syncEntry(
             context,
-            { url: download_url, editUrl: url },
-            { ...options, path, ref },
+            { url: data.download_url, editUrl: data.url },
+            filePath,
+            options,
             octokit,
             { signal },
           );
         default:
           throw new Error("Invalid type");
       }
-    });
-  return await Promise.all(promises);
+    }
+
+    // Directory listing with filtering
+    const promises: Promise<any>[] = data
+      .filter(({ type, path }) => {
+        // Always include directories for recursion
+        if (type === "dir") return true;
+        // Apply filtering logic to files
+        if (type === "file") {
+          return shouldIncludeFile(path, options).included;
+        }
+        return false;
+      })
+      .map(({ type, path, download_url, url }) => {
+        switch (type) {
+          // Recurse
+          case "dir":
+            return processDirectoryRecursively(path);
+          // Return
+          case "file":
+            return syncEntry(
+              context,
+              { url: download_url, editUrl: url },
+              path,
+              options,
+              octokit,
+              { signal },
+            );
+          default:
+            throw new Error("Invalid type");
+        }
+      });
+    return await Promise.all(promises);
+  } // End of processDirectoryRecursively function
 }
 
 

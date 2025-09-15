@@ -21,8 +21,23 @@ async function getExpectedFiles(
   options: ImportOptions,
   signal?: AbortSignal
 ): Promise<Set<string>> {
-  const { owner, repo, path = "", ref = "main" } = options;
+  const { owner, repo, ref = "main" } = options;
   const expectedFiles = new Set<string>();
+
+  // Get all unique directory prefixes from include patterns to limit scanning
+  const directoriesToScan = new Set<string>();
+  if (options.includes && options.includes.length > 0) {
+    for (const includePattern of options.includes) {
+      // Extract directory part from pattern (before any glob wildcards)
+      const pattern = includePattern.pattern;
+      const beforeGlob = pattern.split(/[*?{]/)[0];
+      const dirPart = beforeGlob.includes('/') ? beforeGlob.substring(0, beforeGlob.lastIndexOf('/')) : '';
+      directoriesToScan.add(dirPart);
+    }
+  } else {
+    // If no includes specified, scan from root
+    directoriesToScan.add('');
+  }
 
   async function processDirectory(dirPath: string) {
     try {
@@ -36,9 +51,10 @@ async function getExpectedFiles(
 
       if (!Array.isArray(data)) {
         // Single file
-        if (data.type === 'file' && shouldIncludeFile(data.path, options)) {
-          const id = generateId({ ...options, path: data.path });
-          const localPath = generatePath(options, id);
+        if (data.type === 'file' && shouldIncludeFile(data.path, options).included) {
+          const id = generateId(data.path);
+          const includeResult = shouldIncludeFile(data.path, options);
+          const localPath = generatePath(data.path, includeResult.included ? includeResult.matchedPattern : null);
           // Convert to absolute path for consistent comparison
           const absolutePath = localPath.startsWith('/') ? localPath : join(process.cwd(), localPath);
           expectedFiles.add(absolutePath);
@@ -50,15 +66,16 @@ async function getExpectedFiles(
       const promises = data
         .filter(({ type, path }) => {
           if (type === "dir") return true;
-          if (type === "file") return shouldIncludeFile(path, options);
+          if (type === "file") return shouldIncludeFile(path, options).included;
           return false;
         })
         .map(async ({ type, path: itemPath }) => {
           if (type === "dir") {
             await processDirectory(itemPath);
           } else if (type === "file") {
-            const id = generateId({ ...options, path: itemPath });
-            const localPath = generatePath(options, id);
+            const id = generateId(itemPath);
+            const includeResult = shouldIncludeFile(itemPath, options);
+            const localPath = generatePath(itemPath, includeResult.included ? includeResult.matchedPattern : null);
             // Convert to absolute path for consistent comparison
             const absolutePath = localPath.startsWith('/') ? localPath : join(process.cwd(), localPath);
             expectedFiles.add(absolutePath);
@@ -72,7 +89,10 @@ async function getExpectedFiles(
     }
   }
 
-  await processDirectory(path);
+  // Process only the directories that match our include patterns
+  for (const dirPath of directoriesToScan) {
+    await processDirectory(dirPath);
+  }
   return expectedFiles;
 }
 
@@ -125,10 +145,10 @@ export async function performSelectiveCleanup(
 ): Promise<SyncStats> {
   const startTime = Date.now();
   const { logger } = context;
-  const configName = config.name || `${config.owner}/${config.repo}${config.path ? `:${config.path}` : ''}`;
+  const configName = config.name || `${config.owner}/${config.repo}`;
   
-  if (!config.basePath) {
-    // No cleanup needed if no basePath specified
+  if (!config.includes || config.includes.length === 0) {
+    // No cleanup needed if no include patterns specified
     return {
       added: 0,
       updated: 0,
@@ -141,12 +161,16 @@ export async function performSelectiveCleanup(
   logger.debug(`Starting selective cleanup for ${configName}`);
 
   try {
-    // Get existing local files first
-    const existingFiles = await getExistingFiles(config.basePath);
+    // Get existing local files from all include pattern base paths
+    const allExistingFiles = new Set<string>();
+    for (const includePattern of config.includes) {
+      const existingFiles = await getExistingFiles(includePattern.basePath);
+      existingFiles.forEach(file => allExistingFiles.add(file));
+    }
     
     // If no existing files, skip cleanup (fresh import)
-    if (existingFiles.size === 0) {
-      logger.debug(`No existing files in ${config.basePath}, skipping cleanup`);
+    if (allExistingFiles.size === 0) {
+      logger.debug(`No existing files found in any base paths, skipping cleanup`);
       return {
         added: 0,
         updated: 0,
@@ -161,7 +185,7 @@ export async function performSelectiveCleanup(
     
     // Find files to delete (exist locally but not in remote)
     const filesToDelete: string[] = [];
-    for (const existingFile of existingFiles) {
+    for (const existingFile of allExistingFiles) {
       if (!expectedFiles.has(existingFile)) {
         filesToDelete.push(existingFile);
       }
