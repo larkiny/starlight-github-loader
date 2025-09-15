@@ -36,7 +36,6 @@ const REMOTE_CONTENT: ImportOptions[] = [
         basePath: "src/content/docs/imported",
       },
     ],
-    clear: false, // Recommended: prevents content collection invalidation
   },
 ];
 
