@@ -34,47 +34,6 @@ export function generateId(options: ImportOptions) {
   return id;
 }
 
-/**
- * Applies file renaming rules to a path if configured
- * @param filePath - Original file path relative to repository
- * @param options - Import options containing fileRenames configuration  
- * @returns Renamed path if rule matches, otherwise original path
- * @internal
- */
-export function applyFileRename(filePath: string, options: ImportOptions): string {
-  if (!options.fileRenames || options.fileRenames.length === 0) {
-    return filePath;
-  }
-
-  // Find matching rename rule - try both with and without extension
-  let rename = options.fileRenames.find(r => r.from === filePath);
-  
-  if (!rename) {
-    // If no direct match, try matching with extension added
-    const filePathWithExt = `${filePath}.md`;
-    rename = options.fileRenames.find(r => r.from === filePathWithExt);
-  }
-  
-  if (!rename) {
-    // If still no match, try matching without extension
-    const lastDotIndex = filePath.lastIndexOf('.');
-    if (lastDotIndex > 0) {
-      const filePathWithoutExt = filePath.substring(0, lastDotIndex);
-      rename = options.fileRenames.find(r => r.from === filePathWithoutExt);
-    }
-  }
-  
-  if (rename) {
-    // Remove extension from the target if it has one, since generatePath will add it back
-    const lastDotIndex = rename.to.lastIndexOf('.');
-    if (lastDotIndex > 0) {
-      return rename.to.substring(0, lastDotIndex);
-    }
-    return rename.to;
-  }
-
-  return filePath;
-}
 
 /**
  * Generates a path based on the provided options and optional identifier.
@@ -87,8 +46,8 @@ export function applyFileRename(filePath: string, options: ImportOptions): strin
  */
 export function generatePath(options: ImportOptions, id?: string) {
   if (typeof id === "string") {
-    // Apply file renaming if configured
-    const renamedId = applyFileRename(id, options);
+    // Use the id as-is without any renaming
+    const renamedId = id;
     
     // Preserve original file extension from options.path
     const originalPath = options.path || "";
@@ -126,23 +85,37 @@ export async function syncFile(path: string, content: string) {
 const DEFAULT_ASSET_PATTERNS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp'];
 
 /**
- * Checks if a file path should be included based on ignore patterns
+ * Checks if a file path should be included based on include patterns
  * @param filePath - The file path to check (relative to the repository root)
- * @param options - Import options containing ignores patterns
+ * @param options - Import options containing includes patterns
  * @returns true if file should be included, false otherwise
  * @internal
  */
 export function shouldIncludeFile(filePath: string, options: ImportOptions): boolean {
-  const { ignores } = options;
+  const { includes, path: basePath } = options;
   
-  // If no ignore patterns specified, include all files
-  if (!ignores || ignores.length === 0) {
+  // If no include patterns specified, include all files
+  if (!includes || includes.length === 0) {
     return true;
   }
   
-  // Check if file matches any ignore pattern
-  const ignoreMatchers = ignores.map(pattern => picomatch(pattern));
-  return !ignoreMatchers.some(matcher => matcher(filePath));
+  // Convert absolute filePath to relative path for pattern matching
+  // Remove the basePath prefix to make patterns work relative to options.path
+  let testPath = filePath;
+  if (basePath) {
+    const normalizedBasePath = basePath.endsWith('/') ? basePath : basePath + '/';
+    if (filePath.startsWith(normalizedBasePath)) {
+      testPath = filePath.substring(normalizedBasePath.length);
+    } else if (filePath.startsWith(basePath + '/')) {
+      testPath = filePath.substring(basePath.length + 1);
+    }
+  }
+  
+  // Check if file matches any include pattern
+  const includeMatchers = includes.map(pattern => picomatch(pattern));
+  const isIncluded = includeMatchers.some(matcher => matcher(testPath));
+  
+  return isIncluded;
 }
 
 /**
@@ -416,7 +389,9 @@ export async function syncEntry(
   }
   if (!res.ok) throw new Error(res.statusText);
   let contents = await res.text();
-  const entryType = configForFile(options?.path || "tmp.md");
+  // Use original path for content type detection, ensure it has an extension
+  const pathForContentType = options?.path || "tmp.md";
+  const entryType = configForFile(pathForContentType.includes('.') ? pathForContentType : pathForContentType + '.md');
   if (!entryType) throw new Error("No entry type found");
 
   // Apply content transforms if provided

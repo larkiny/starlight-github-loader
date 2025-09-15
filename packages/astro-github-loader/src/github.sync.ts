@@ -24,7 +24,7 @@ function createConfigHash(options: ImportOptions): string {
     repo: options.repo,
     path: options.path,
     ref: options.ref,
-    ignores: options.ignores,
+    includes: options.includes,
     replace: options.replace
   };
   return createHash('md5').update(JSON.stringify(configForHashing)).digest('hex');

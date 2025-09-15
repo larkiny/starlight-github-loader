@@ -26,15 +26,6 @@ export interface TransformContext {
  */
 export type TransformFunction = (content: string, context: TransformContext) => string;
 
-/**
- * Configuration for renaming files during import
- */
-export interface FileRename {
-  /** Source path relative to the repository path */
-  from: string;
-  /** Destination path relative to the basePath */
-  to: string;
-}
 
 export type GithubLoaderOptions = {
   octokit: Octokit;
@@ -174,15 +165,10 @@ export type ImportOptions = {
    */
   transforms?: TransformFunction[];
   /**
-   * Array of glob patterns or specific file paths to ignore (relative to path)
-   * Files matching these patterns will be skipped during import
+   * Array of glob patterns or specific file paths to include (relative to path)
+   * Only files matching these patterns will be imported. If not specified, all files will be included.
    */
-  ignores?: string[];
-  /**
-   * Array of file rename configurations to apply during import
-   * Files will be saved to the renamed path relative to basePath
-   */
-  fileRenames?: FileRename[];
+  includes?: string[];
 };
 
 export type FetchOptions = RequestInit & {
