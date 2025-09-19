@@ -85,15 +85,30 @@ export function githubLoader({
         store.clear();
       }
       
-      await Promise.all(
-        configs.map(async (config) => {
+      // Process each config sequentially to avoid overwhelming GitHub API/CDN
+      for (let i = 0; i < configs.length; i++) {
+        const config = configs[i];
+        
+        if (config.enabled === false) {
+          logger.debug(`Skipping disabled config: ${config.name || `${config.owner}/${config.repo}`}`);
+          continue;
+        }
+
+        // Add small delay between configs to be gentler on GitHub's CDN
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        try {
           // Perform the import
+          logger.info(`🔄 Starting import for ${config.name || `${config.owner}/${config.repo}`}`);
           await toCollectionEntry({
             context,
             octokit,
             options: config,
             fetchOptions,
           });
+          logger.info(`✅ Completed import for ${config.name || `${config.owner}/${config.repo}`}`);
 
           // Update state tracking for future dry runs
           try {
@@ -112,8 +127,11 @@ export function githubLoader({
             // Don't fail the import if state tracking fails
             logger.debug(`Failed to update import state for ${config.name || `${config.owner}/${config.repo}`}: ${error}`);
           }
-        })
-      );
+        } catch (error: any) {
+          logger.error(`Import failed for ${config.name || `${config.owner}/${config.repo}`}: ${error}`);
+          // Continue with other configs even if one fails
+        }
+      }
     },
   };
 }

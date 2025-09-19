@@ -188,6 +188,7 @@ export async function downloadAsset(
   localPath: string,
   signal?: AbortSignal
 ): Promise<void> {
+  console.log(`      📡 GitHub API call: repos.getContent(${owner}/${repo}:${assetPath}@${ref})`);
   try {
     const { data } = await octokit.rest.repos.getContent({
       owner,
@@ -197,24 +198,33 @@ export async function downloadAsset(
       request: { signal },
     });
 
+    console.log(`      📋 GitHub API response: type=${data.type}, isArray=${Array.isArray(data)}`);
+
     if (Array.isArray(data) || data.type !== 'file' || !data.download_url) {
-      throw new Error(`Asset ${assetPath} is not a valid file`);
+      throw new Error(`Asset ${assetPath} is not a valid file (type: ${data.type}, downloadUrl: ${data.download_url})`);
     }
 
+    console.log(`      🌐 Fetching from download URL: ${data.download_url}`);
     const response = await fetch(data.download_url, { signal });
     if (!response.ok) {
-      throw new Error(`Failed to download asset: ${response.statusText}`);
+      throw new Error(`Failed to download asset: ${response.status} ${response.statusText}`);
     }
 
+    console.log(`      📦 Converting to buffer (size: ${response.headers.get('content-length')} bytes)`);
     const buffer = await response.arrayBuffer();
     const dir = dirname(localPath);
-    
+
+    console.log(`      📁 Ensuring directory exists: ${dir}`);
     if (!existsSync(dir)) {
       await fs.mkdir(dir, { recursive: true });
+      console.log(`      ✨ Created directory: ${dir}`);
     }
-    
+
+    console.log(`      💿 Writing file: ${localPath}`);
     await fs.writeFile(localPath, new Uint8Array(buffer));
+    console.log(`      🎉 Asset download complete!`);
   } catch (error: any) {
+    console.log(`      🚫 Download error: ${error.message} (status: ${error.status})`);
     if (error.status === 404) {
       console.warn(`Asset not found: ${assetPath}`);
       return;
@@ -271,45 +281,59 @@ async function processAssets(
   signal?: AbortSignal
 ): Promise<string> {
   const { owner, repo, ref = 'main', assetsPath, assetsBaseUrl, assetPatterns } = options;
-  
+
+  console.log(`🖼️  Processing assets for ${filePath}`);
+  console.log(`    assetsPath: ${assetsPath}`);
+  console.log(`    assetsBaseUrl: ${assetsBaseUrl}`);
+
   if (!assetsPath || !assetsBaseUrl) {
+    console.log(`    ⏭️  Skipping asset processing - missing assetsPath or assetsBaseUrl`);
     return content;
   }
 
   // Detect assets in the content
   const detectedAssets = detectAssets(content, assetPatterns);
+  console.log(`    📸 Detected ${detectedAssets.length} assets:`, detectedAssets);
+
   if (detectedAssets.length === 0) {
     return content;
   }
 
   const assetMap = new Map<string, string>();
-  
+
   // Process each detected asset
   await Promise.all(detectedAssets.map(async (assetPath) => {
+    console.log(`    📥 Processing asset: ${assetPath}`);
     try {
       // Resolve the asset path relative to the current markdown file
       const resolvedAssetPath = resolveAssetPath(filePath, assetPath);
-      
+      console.log(`    🔗 Resolved path: ${resolvedAssetPath}`);
+
       // Generate unique filename to avoid conflicts
       const originalFilename = basename(assetPath);
       const ext = extname(originalFilename);
       const nameWithoutExt = basename(originalFilename, ext);
       const uniqueFilename = `${nameWithoutExt}-${Date.now()}${ext}`;
       const localPath = join(assetsPath, uniqueFilename);
-      
+      console.log(`    💾 Local path: ${localPath}`);
+
       // Download the asset
+      console.log(`    ⬇️  Downloading asset from ${owner}/${repo}@${ref}:${resolvedAssetPath}`);
       await downloadAsset(octokit, owner, repo, ref, resolvedAssetPath, localPath, signal);
-      
+      console.log(`    ✅ Downloaded successfully`);
+
       // Generate URL for the transformed reference
       const assetUrl = `${assetsBaseUrl}/${uniqueFilename}`.replace(/\/+/g, '/');
-      
+      console.log(`    🔄 Transform: ${assetPath} -> ${assetUrl}`);
+
       // Map the transformation
       assetMap.set(assetPath, assetUrl);
     } catch (error) {
-      console.warn(`Failed to process asset ${assetPath}:`, error);
+      console.warn(`    ❌ Failed to process asset ${assetPath}:`, error);
     }
   }));
 
+  console.log(`    🗺️  Asset map size: ${assetMap.size}`);
   // Transform the content with new asset references
   return transformAssetReferences(content, assetMap);
 }
@@ -403,15 +427,26 @@ export async function syncEntry(
   const entryType = configForFile(filePath || "tmp.md");
   if (!entryType) throw new Error("No entry type found");
 
+  // Process assets FIRST if configuration is provided - before content transforms
+  // This ensures asset detection works with original markdown links before they get transformed
+  if (options.assetsPath && options.assetsBaseUrl) {
+    await processAssets(contents, filePath, options, octokit, init.signal || undefined).then(transformedContent => {
+      contents = transformedContent;
+    }).catch(error => {
+      logger.warn(`Asset processing failed for ${id}: ${error.message}`);
+    });
+  }
+
   // Apply content transforms if provided - both global and pattern-specific
+  // This runs after asset processing so transforms work with processed content
   const includeResultForTransforms = shouldIncludeFile(filePath, options);
   const transformsToApply: any[] = [];
-  
+
   // Add global transforms first
   if (options.transforms && options.transforms.length > 0) {
     transformsToApply.push(...options.transforms);
   }
-  
+
   // Add pattern-specific transforms
   if (includeResultForTransforms.included && includeResultForTransforms.matchedPattern && options.includes) {
     const matchedInclude = options.includes[includeResultForTransforms.matchedPattern.index];
@@ -419,7 +454,7 @@ export async function syncEntry(
       transformsToApply.push(...matchedInclude.transforms);
     }
   }
-  
+
   if (transformsToApply.length > 0) {
     const transformContext = {
       id,
@@ -427,7 +462,7 @@ export async function syncEntry(
       options,
       matchedPattern: includeResultForTransforms.included ? includeResultForTransforms.matchedPattern : undefined,
     };
-    
+
     for (const transform of transformsToApply) {
       try {
         contents = transform(contents, transformContext);
@@ -435,15 +470,6 @@ export async function syncEntry(
         logger.warn(`Transform failed for ${id}: ${error}`);
       }
     }
-  }
-
-  // Process assets if configuration is provided
-  if (options.assetsPath && options.assetsBaseUrl) {
-    await processAssets(contents, filePath, options, octokit, init.signal || undefined).then(transformedContent => {
-      contents = transformedContent;
-    }).catch(error => {
-      logger.warn(`Asset processing failed for ${id}: ${error.message}`);
-    });
   }
 
   const includeResult = shouldIncludeFile(filePath, options);
@@ -551,15 +577,15 @@ export async function toCollectionEntry({
     directoriesToScan.add('');
   }
 
-  // Process each directory that matches our include patterns
-  const allPromises: Promise<any>[] = [];
+  // Process each directory that matches our include patterns sequentially
+  const results = [];
   
   for (const dirPath of directoriesToScan) {
-    const promise = processDirectoryRecursively(dirPath);
-    allPromises.push(promise);
+    const result = await processDirectoryRecursively(dirPath);
+    results.push(result);
   }
   
-  return await Promise.all(allPromises);
+  return results;
 
   async function processDirectoryRecursively(path: string): Promise<any> {
     // Fetch the content
@@ -591,8 +617,8 @@ export async function toCollectionEntry({
       }
     }
 
-    // Directory listing with filtering
-    const promises: Promise<any>[] = data
+    // Directory listing with filtering - process sequentially
+    const filteredEntries = data
       .filter(({ type, path }) => {
         // Always include directories for recursion
         if (type === "dir") return true;
@@ -601,27 +627,31 @@ export async function toCollectionEntry({
           return shouldIncludeFile(path, options).included;
         }
         return false;
-      })
-      .map(({ type, path, download_url, url }) => {
-        switch (type) {
-          // Recurse
-          case "dir":
-            return processDirectoryRecursively(path);
-          // Return
-          case "file":
-            return syncEntry(
-              context,
-              { url: download_url, editUrl: url },
-              path,
-              options,
-              octokit,
-              { signal },
-            );
-          default:
-            throw new Error("Invalid type");
-        }
       });
-    return await Promise.all(promises);
+    
+    const results = [];
+    for (const { type, path, download_url, url } of filteredEntries) {
+      switch (type) {
+        // Recurse
+        case "dir":
+          results.push(await processDirectoryRecursively(path));
+          break;
+        // Return
+        case "file":
+          results.push(await syncEntry(
+            context,
+            { url: download_url, editUrl: url },
+            path,
+            options,
+            octokit,
+            { signal },
+          ));
+          break;
+        default:
+          throw new Error("Invalid type");
+      }
+    }
+    return results;
   } // End of processDirectoryRecursively function
 }
 
