@@ -63,9 +63,42 @@ export const collections = {
 };
 ```
 
+## Processing Pipeline
+
+The astro-github-loader processes files through a well-defined pipeline with clear order of operations:
+
+### Order of Operations
+
+1. **File Discovery**: Scan repository using include patterns
+2. **Pattern Matching**: Determine which include pattern(s) match each file
+3. **Path Mapping**: Apply `pathMappings` to restructure file paths within the repository context
+4. **Local Path Generation**: Combine pattern `basePath` with the (possibly transformed) relative path
+5. **Content Transforms**: Apply transformations in order:
+   - Global transforms (from main config)
+   - Pattern-specific transforms (from matched include pattern)
+6. **Link Transformation**: Process all markdown links across all imported files using `linkMappings`
+7. **Asset Processing**: Download and transform asset references
+
+### Path vs Link Transformations
+
+Understanding when and why to use each type of transformation:
+
+- **`pathMappings`**: Controls where files are imported to (changes file system paths)
+
+  - Applied during import process
+  - Affects the final location of files on disk
+  - **Use when**: You need to restructure the imported files differently than they exist in the source repository
+  - Example: `'docs/capabilities/': 'docs/'` moves files from capabilities folder up one level
+
+- **`linkMappings`**: Controls how markdown links are transformed (changes URLs in content)
+  - Applied after all content is imported
+  - Affects links within markdown content
+  - **Use when**: You have restructured files (with `pathMappings`) OR need to handle links to files outside the imported document set
+  - Example: Transform `../cli/index.md` to `/reference/algokit-cli/` (external reference)
+
 ## Pattern-Based Import System
 
-The new `includes` system allows you to define multiple import patterns, each with its own destination path and transforms:
+The `includes` system allows you to define multiple import patterns, each with its own destination path and transforms:
 
 ```typescript
 const REMOTE_CONTENT: ImportOptions[] = [
@@ -74,16 +107,26 @@ const REMOTE_CONTENT: ImportOptions[] = [
     owner: "your-org",
     repo: "your-docs-repo",
     includes: [
-      // Import main documentation
+      // Import main documentation with path restructuring
       {
         pattern: "docs/**/*.md",
         basePath: "src/content/docs/guides",
+        pathMappings: {
+          // Move files from capabilities subfolder up one level
+          "docs/capabilities/": "docs/",
+          // Rename specific files
+          "docs/README.md": "docs/overview.md",
+        },
         transforms: [addGuideMetadata],
       },
       // Import API reference to different location
       {
         pattern: "api-reference/**/*.md",
         basePath: "src/content/docs/api",
+        pathMappings: {
+          // Flatten API structure
+          "api-reference/v1/": "api-reference/",
+        },
         transforms: [addApiMetadata, formatApiDocs],
       },
       // Import specific files
@@ -102,7 +145,40 @@ const REMOTE_CONTENT: ImportOptions[] = [
 - **Glob patterns**: Use `**/*.md`, `docs/guides/*.md`, specific files, etc.
 - **Per-pattern basePath**: Each pattern can target a different local directory
 - **Per-pattern transforms**: Apply different transformations to different content types
+- **Per-pattern pathMappings**: Restructure file paths within each pattern
 - **Directory structure preservation**: Relative paths within patterns are preserved
+
+### Path Mappings
+
+Use `pathMappings` to restructure files during import.
+
+**Common use cases**:
+
+- Flatten nested folder structures (e.g., move `docs/capabilities/` files to `docs/`)
+- Rename specific files (e.g., `README.md` → `overview.md`)
+- Reorganize content for better site structure
+- Remove unwanted path segments from imported files
+
+```typescript
+{
+  pattern: "docs/**/*.md",
+  basePath: "src/content/docs/guides",
+  pathMappings: {
+    // File mappings (exact paths)
+    'docs/README.md': 'docs/overview.md',
+    'docs/getting-started.md': 'docs/quickstart.md',
+
+    // Folder mappings (require trailing slash)
+    'docs/capabilities/': 'docs/',           // Move all files up one level
+    'docs/legacy/guides/': 'docs/archive/',  // Move to different folder
+  },
+}
+```
+
+**Important**: Folder mappings require trailing slashes to distinguish from file mappings:
+
+- ✅ `'docs/capabilities/': 'docs/'` (folder mapping - moves all files)
+- ❌ `'docs/capabilities': 'docs/'` (treated as exact file match)
 
 ### Common Pattern Examples
 
@@ -113,11 +189,23 @@ const REMOTE_CONTENT: ImportOptions[] = [
 - **`README.md`** - Specific file at repository root
 - **`docs/getting-started.md`** - Specific file at specific path
 
-## Content Transformations
+## Content & Link Transformations
 
-Apply transformations globally or per-pattern:
+The loader supports both content transformations (modifying file contents) and link transformations (fixing cross-references):
 
-```typescript
+### Content Transformations
+
+Apply content transformations globally or per-pattern.
+
+**Use content transforms when you need to**:
+
+- Add frontmatter (metadata) to imported files
+- Convert H1 headings to frontmatter titles
+- Add import tracking information
+- Modify content structure or formatting
+- Add badges, labels, or other metadata specific to your site
+
+````typescript
 import { githubLoader } from "@larkiny/astro-github-loader";
 import type { TransformFunction } from "@larkiny/astro-github-loader";
 
@@ -141,18 +229,57 @@ const addApiDocsBadge: TransformFunction = (content, context) => {
   return lines.join("\n");
 };
 
+// Convert H1 to title frontmatter
+const convertH1ToTitle: TransformFunction = (content, context) => {
+  const h1Match = content.match(/^#\s+(.+)$/m);
+  if (h1Match) {
+    const title = h1Match[1];
+    // Remove the H1 from content
+    content = content.replace(/^#\s+.+$/m, '').trim();
+    // Add to frontmatter
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    if (frontmatterMatch) {
+      const existingFrontmatter = frontmatterMatch[1];
+      const newFrontmatter = `---\ntitle: "${title}"\n${existingFrontmatter}\n---`;
+      content = content.replace(/^---\n[\s\S]*?\n---/, newFrontmatter);
+    } else {
+      content = `---\ntitle: "${title}"\n---\n\n${content}`;
+    }
+  }
+  return content;
+};
+
+### Link Transformations
+
+Configure link transformations to handle cross-repository links and restructured file references.
+
+**Use link mappings when**:
+- You've restructured files with `pathMappings` and need to update internal links
+- Links reference files outside the imported document set (external repositories, different sections)
+- Links need to be transformed for your site's URL structure (e.g., Starlight routing)
+- You need to handle broken or outdated links in the source content
+
+```typescript
+import { createStarlightLinkMappings } from "./transforms/links.js";
+
 const REMOTE_CONTENT: ImportOptions[] = [
   {
-    name: "Docs with Transforms",
+    name: "Docs with Full Transformations",
     owner: "your-org",
     repo: "docs-repo",
-    // Global transforms applied to all includes
-    transforms: [addImportMetadata],
+
+    // Global content transforms applied to all includes
+    transforms: [addImportMetadata, convertH1ToTitle],
+
     includes: [
       {
         pattern: "docs/**/*.md",
         basePath: "src/content/docs/guides",
-        // These transforms are applied in addition to global ones
+        pathMappings: {
+          'docs/capabilities/': 'docs/',
+          'docs/README.md': 'docs/overview.md',
+        },
+        // Pattern-specific content transforms
         transforms: [addGuideFormatting],
       },
       {
@@ -161,9 +288,38 @@ const REMOTE_CONTENT: ImportOptions[] = [
         transforms: [addApiDocsBadge, formatApiContent],
       },
     ],
+
+    // Link transformations (applied after content transforms)
+    linkTransform: {
+      stripPrefixes: ['src/content/docs'],
+      linkMappings: [
+        // Apply Starlight-specific link transformations
+        ...createStarlightLinkMappings(),
+
+        // Custom link mappings for external references
+        {
+          pattern: /^\.\.\/cli\/?$/,
+          replacement: (match: string, anchor: string) => {
+            return `/reference/algokit-cli`;
+          },
+          global: true,
+          description: 'Map CLI reference links to reference section',
+        },
+
+        // Transform README links to introduction
+        {
+          pattern: /^\.\.\/\.\.\/README\.md$/,
+          replacement: (match: string, anchor: string) => {
+            return `/introduction`;
+          },
+          global: true,
+          description: 'Map README links to introduction page',
+        },
+      ],
+    },
   },
 ];
-```
+````
 
 ## Link Transformation Utilities
 
@@ -318,6 +474,33 @@ interface ImportOptions {
   assetsPath?: string; // Local directory for downloaded assets
   assetsBaseUrl?: string; // Base URL for asset references
   assetPatterns?: string[]; // File extensions to treat as assets
+
+  /** Link transformation options (applied after all content transforms) */
+  linkTransform?: ImportLinkTransformOptions;
+}
+
+interface ImportLinkTransformOptions {
+  /** Base paths to strip from final URLs (e.g., ["src/content/docs"]) */
+  stripPrefixes: string[];
+
+  /** Link mappings to transform URLs in markdown links */
+  linkMappings?: LinkMapping[];
+}
+
+interface LinkMapping {
+  /** Pattern to match (string or regex) */
+  pattern: string | RegExp;
+
+  /** Replacement string or function */
+  replacement:
+    | string
+    | ((match: string, anchor: string, context: any) => string);
+
+  /** Apply to all links, not just unresolved internal links (default: false) */
+  global?: boolean;
+
+  /** Description for debugging (optional) */
+  description?: string;
 }
 
 interface IncludePattern {
@@ -329,6 +512,19 @@ interface IncludePattern {
 
   /** Transforms to apply only to files matching this pattern */
   transforms?: TransformFunction[];
+
+  /**
+   * Map of source paths to target paths for controlling where files are imported.
+   *
+   * Supports two types of mappings:
+   * - **File mapping**: `'docs/README.md': 'docs/overview.md'` - moves a specific file to a new path
+   * - **Folder mapping**: `'docs/capabilities/': 'docs/'` - moves all files from source folder to target folder
+   *
+   * **Important**: Folder mappings require trailing slashes to distinguish from file mappings.
+   * - ✅ `'docs/capabilities/': 'docs/'` (folder mapping - moves all files)
+   * - ❌ `'docs/capabilities': 'docs/'` (treated as exact file match)
+   */
+  pathMappings?: Record<string, string>;
 }
 ```
 

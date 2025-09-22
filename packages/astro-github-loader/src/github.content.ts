@@ -1,6 +1,6 @@
 import { existsSync, promises as fs } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { join, dirname, basename, extname } from "node:path";
+import path, { join, dirname, basename, extname } from "node:path";
 import picomatch from "picomatch";
 import { globalLinkTransform, type ImportedFile } from "./github.link-transform.js";
 
@@ -31,21 +31,41 @@ export function generateId(filePath: string): string {
 
 
 /**
- * Applies rename logic to get the final filename for a file
+ * Applies path mapping logic to get the final filename for a file
+ *
+ * Supports two types of path mappings:
+ * - **File mapping**: Exact file path match (e.g., 'docs/README.md' -> 'docs/overview.md')
+ * - **Folder mapping**: Folder path with trailing slash (e.g., 'docs/capabilities/' -> 'docs/')
+ *
  * @param filePath - Original source file path
  * @param matchedPattern - The pattern that matched this file
- * @param options - Import options containing rename mappings
- * @returns Final filename after applying rename logic
+ * @param options - Import options containing path mappings
+ * @returns Final filename after applying path mapping logic
  * @internal
  */
 export function applyRename(filePath: string, matchedPattern?: MatchedPattern | null, options?: ImportOptions): string {
   if (options?.includes && matchedPattern && matchedPattern.index < options.includes.length) {
     const includePattern = options.includes[matchedPattern.index];
-    if (includePattern.rename && includePattern.rename[filePath]) {
-      return includePattern.rename[filePath];
+
+    if (includePattern.pathMappings) {
+      // First check for exact file match (current behavior - backwards compatible)
+      if (includePattern.pathMappings[filePath]) {
+        return includePattern.pathMappings[filePath];
+      }
+
+      // Then check for folder-to-folder mappings
+      for (const [sourceFolder, targetFolder] of Object.entries(includePattern.pathMappings)) {
+        // Check if this is a folder mapping (ends with /) and file is within it
+        if (sourceFolder.endsWith('/') && filePath.startsWith(sourceFolder)) {
+          // Replace the source folder path with target folder path
+          const relativePath = filePath.slice(sourceFolder.length);
+          return path.posix.join(targetFolder, relativePath);
+        }
+      }
     }
   }
-  // Return original filename if no rename found
+
+  // Return original filename if no path mapping found
   return basename(filePath);
 }
 
@@ -53,7 +73,7 @@ export function applyRename(filePath: string, matchedPattern?: MatchedPattern | 
  * Generates a local file path based on the matched pattern and file path
  * @param filePath - The original file path from the repository
  * @param matchedPattern - The pattern that matched this file (or null if no includes specified)
- * @param options - Import options containing includes patterns for rename lookups
+ * @param options - Import options containing includes patterns for path mapping lookups
  * @return {string} The local file path where this content should be stored
  * @internal
  */
@@ -78,10 +98,10 @@ export function generatePath(filePath: string, matchedPattern?: MatchedPattern |
       relativePath = basename(filePath);
     }
 
-    // Apply rename logic
+    // Apply path mapping logic
     const finalFilename = applyRename(filePath, matchedPattern, options);
     if (finalFilename !== basename(filePath)) {
-      // Replace the filename in relativePath with the renamed filename
+      // Replace the filename in relativePath with the path-mapped filename
       const dirPart = dirname(relativePath);
       relativePath = dirPart === '.' ? finalFilename : join(dirPart, finalFilename);
     }
@@ -621,7 +641,7 @@ export async function toCollectionEntry({
     processedFiles = globalLinkTransform(allFiles, {
       stripPrefixes: options.linkTransform.stripPrefixes,
       customHandlers: options.linkTransform.customHandlers,
-      pathMappings: options.linkTransform.pathMappings,
+      linkMappings: options.linkTransform.linkMappings,
     });
   }
 
@@ -710,16 +730,16 @@ export async function toCollectionEntry({
     const includeCheck = shouldIncludeFile(filePath, options);
     const matchedPattern = includeCheck.included ? includeCheck.matchedPattern : null;
 
-    // Check if this file has a rename mapping
-    const hasRename = matchedPattern &&
+    // Check if this file has a path mapping
+    const hasPathMapping = matchedPattern &&
       options?.includes &&
       matchedPattern.index < options.includes.length &&
-      options.includes[matchedPattern.index].rename &&
-      options.includes[matchedPattern.index].rename![filePath];
+      options.includes[matchedPattern.index].pathMappings &&
+      options.includes[matchedPattern.index].pathMappings![filePath];
 
     // Generate ID based on appropriate path
-    const id = hasRename ?
-      generateId(generatePath(filePath, matchedPattern, options)) : // Use renamed path for ID
+    const id = hasPathMapping ?
+      generateId(generatePath(filePath, matchedPattern, options)) : // Use path-mapped path for ID
       generateId(filePath); // Use original path for ID
 
     const finalPath = generatePath(filePath, matchedPattern, options);

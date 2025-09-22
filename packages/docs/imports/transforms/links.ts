@@ -1,9 +1,9 @@
-import type { PathMapping } from "@larkiny/astro-github-loader";
+import type { LinkMapping } from "@larkiny/astro-github-loader";
 
 /**
- * Helper function to create common path mappings for this project
+ * Helper function to create common link mappings for this project
  */
-export function createCommonPathMappings(): PathMapping[] {
+export function createCommonLinkMappings(): LinkMapping[] {
   return [
     // Strip /index.md for Starlight routing (global - applies to all links)
     {
@@ -29,9 +29,9 @@ export function createCommonPathMappings(): PathMapping[] {
 }
 
 /**
- * Helper function to create Starlight-specific path mappings for this project
+ * Helper function to create Starlight-specific link mappings for this project
  */
-export function createStarlightPathMappings(): PathMapping[] {
+export function createStarlightLinkMappings(): LinkMapping[] {
   return [
     // Strip /index.md and /index (Starlight treats these specially)
     // Example: 'modules/index.md#some-anchor' -> 'modules/#some-anchor'

@@ -1,6 +1,6 @@
 import { slug } from 'github-slugger';
 import path from 'node:path';
-import type { PathMapping } from './github.types.js';
+import type { LinkMapping } from './github.types.js';
 
 /**
  * Represents an imported file with its content and metadata
@@ -29,7 +29,7 @@ interface GlobalLinkContext {
   /** Custom handlers for special link types */
   customHandlers?: LinkHandler[];
   /** Path mappings for common transformations */
-  pathMappings?: PathMapping[];
+  linkMappings?: LinkMapping[];
 }
 
 /**
@@ -112,17 +112,17 @@ function normalizePath(linkPath: string, currentFilePath: string): string {
 }
 
 /**
- * Apply path mappings to a link
+ * Apply link mappings to transform a URL
  */
-function applyPathMappings(
+function applyLinkMappings(
   linkUrl: string,
-  pathMappings: PathMapping[],
+  linkMappings: LinkMapping[],
   context: LinkContext
 ): string {
   const { path: linkPath, anchor } = extractAnchor(linkUrl);
   let transformedPath = linkPath;
 
-  for (const mapping of pathMappings) {
+  for (const mapping of linkMappings) {
     let matched = false;
     let replacement = '';
 
@@ -217,10 +217,10 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
   let processedUrl = linkUrl;
 
   // Apply global path mappings (only to non-external links)
-  if (context.global.pathMappings) {
-    const globalMappings = context.global.pathMappings.filter(m => m.global);
+  if (context.global.linkMappings) {
+    const globalMappings = context.global.linkMappings.filter(m => m.global);
     if (globalMappings.length > 0) {
-      processedUrl = applyPathMappings(processedUrl, globalMappings, context);
+      processedUrl = applyLinkMappings(processedUrl, globalMappings, context);
     }
   }
 
@@ -239,10 +239,10 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
   }
 
   // Apply non-global path mappings to unresolved links
-  if (context.global.pathMappings) {
-    const nonGlobalMappings = context.global.pathMappings.filter(m => !m.global);
+  if (context.global.linkMappings) {
+    const nonGlobalMappings = context.global.linkMappings.filter(m => !m.global);
     if (nonGlobalMappings.length > 0) {
-      const mappedUrl = applyPathMappings(processedUrl, nonGlobalMappings, context);
+      const mappedUrl = applyLinkMappings(processedUrl, nonGlobalMappings, context);
       if (mappedUrl !== processedUrl) {
         return `[${linkText}](${mappedUrl})`;
       }
@@ -272,7 +272,7 @@ export function globalLinkTransform(
   options: {
     stripPrefixes: string[];
     customHandlers?: LinkHandler[];
-    pathMappings?: PathMapping[];
+    linkMappings?: LinkMapping[];
   }
 ): ImportedFile[] {
   // Build global context
@@ -289,7 +289,7 @@ export function globalLinkTransform(
     sourceToIdMap,
     stripPrefixes: options.stripPrefixes,
     customHandlers: options.customHandlers,
-    pathMappings: options.pathMappings,
+    linkMappings: options.linkMappings,
   };
 
   // Transform links in all files

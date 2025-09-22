@@ -8,7 +8,7 @@ import {
   type ImportOptions,
   type LoaderContext,
 } from "@larkiny/astro-github-loader";
-import { createStarlightPathMappings } from "../imports/transforms/links.js";
+import { createStarlightLinkMappings } from "../imports/transforms/links.js";
 import { convertH1ToTitle } from "../imports/transforms/common.js";
 import {
   createFrontmatterTransform,
@@ -50,8 +50,8 @@ const REMOTE_CONTENT: ImportOptions[] = [
     transforms: [convertH1ToTitle],
     linkTransform: {
       stripPrefixes: ["src/content/docs"],
-      pathMappings: [
-        ...createStarlightPathMappings(),
+      linkMappings: [
+        ...createStarlightLinkMappings(),
         // Map ../cli/ to reference/algokit-cli for cross-repository links (after index.md is stripped)
         {
           pattern: /^\.\.\/cli\/?$/,

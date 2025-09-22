@@ -10,9 +10,9 @@ import {Octokit} from "octokit";
 import type { LinkHandler } from "./github.link-transform.js";
 
 /**
- * Path mapping for common link transformations
+ * Link mapping for transforming URLs in markdown links
  */
-export interface PathMapping {
+export interface LinkMapping {
   /** Pattern to match (string or regex) */
   pattern: string | RegExp;
   /** Replacement string or function */
@@ -31,8 +31,8 @@ export interface ImportLinkTransformOptions {
   stripPrefixes: string[];
   /** Custom handlers for special link types */
   customHandlers?: LinkHandler[];
-  /** Path mappings for common transformations */
-  pathMappings?: PathMapping[];
+  /** Link mappings to transform URLs in markdown links */
+  linkMappings?: LinkMapping[];
 }
 
 /**
@@ -79,8 +79,18 @@ export interface IncludePattern {
   basePath: string;
   /** Transforms to apply only to files matching this pattern */
   transforms?: TransformFunction[];
-  /** Map of source paths to target filenames for renaming files */
-  rename?: Record<string, string>;
+  /**
+   * Map of source paths to target paths for controlling where files are imported.
+   *
+   * Supports two types of mappings:
+   * - **File mapping**: `'docs/README.md': 'docs/overview.md'` - moves a specific file to a new path
+   * - **Folder mapping**: `'docs/capabilities/': 'docs/'` - moves all files from source folder to target folder
+   *
+   * **Important**: Folder mappings require trailing slashes to distinguish from file mappings.
+   * - ✅ `'docs/capabilities/': 'docs/'` (folder mapping - moves all files)
+   * - ❌ `'docs/capabilities': 'docs/'` (treated as exact file match)
+   */
+  pathMappings?: Record<string, string>;
 }
 
 
