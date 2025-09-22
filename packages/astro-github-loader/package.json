@@ -42,6 +42,7 @@
     "astro": "astro"
   },
   "dependencies": {
+    "github-slugger": "^2.0.0",
     "octokit": "^4.1.2",
     "picomatch": "^4.0.2"
   },

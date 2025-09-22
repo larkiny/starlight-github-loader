@@ -6,6 +6,13 @@
       "lastCommitSha": "4f8c1f8473c93d4c16bcc9f7cea73991174ced12",
       "lastImported": "2025-09-13T10:23:59.435Z",
       "ref": "docs/starlight-preview"
+    },
+    "larkiny/algokit-cli-docs@main": {
+      "name": "AlgoKit CLI Docs",
+      "repoId": "larkiny/algokit-cli-docs@main",
+      "lastCommitSha": "d7fdc1207d443c056d5bf6a616ec01b253ea25e2",
+      "lastImported": "2025-09-22T06:09:47.297Z",
+      "ref": "main"
     }
   },
   "lastChecked": "2025-09-13T09:13:26.336Z"

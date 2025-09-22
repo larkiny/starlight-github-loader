@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import mdx from "@astrojs/mdx";
+import { resolve } from "path";
 import starlight from "@astrojs/starlight";
 import starlightTypeDoc, { typeDocSidebarGroup } from "starlight-typedoc";
 
@@ -9,34 +10,40 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "astro-github-loader",
-      plugins: [
-        starlightTypeDoc({
-          output: "typedoc",
-          sidebar: {
-            label: "Github Loader",
-          },
-          entryPoints: ["../astro-github-loader/src/index.ts"],
-          tsconfig: "../astro-github-loader/tsconfig.json",
-        }),
-      ],
       sidebar: [
         {
-          label: "Static Docs",
-          autogenerate: { directory: "StaticDocs" },
+          label: "Introduction",
+          link: "/getting-started/introduction",
         },
-        typeDocSidebarGroup,
         {
-          label: "Getting Started",
+          label: "AlgoKit Utils (Typescript)",
           badge: { text: "Remote", variant: "danger" },
-          autogenerate: { directory: "algokit" },
+          autogenerate: { directory: "algokit/cli" },
         },
         {
           label: "Reference",
           badge: { text: "Remote", variant: "danger" },
-          autogenerate: { directory: "references" },
+          autogenerate: { directory: "reference/algokit/cli" },
         },
+        // {
+        //   label: "AlgoKit Utils FIXED",
+        //   badge: { text: "Remote", variant: "danger" },
+        //   autogenerate: { directory: "imported/algokit/cli" },
+        // },
+        // {
+        //   label: "Reference FIXED",
+        //   badge: { text: "Remote", variant: "danger" },
+        //   autogenerate: { directory: "imported/reference/algokit/cli" },
+        // },
       ],
     }),
     mdx(),
   ],
+  vite: {
+    resolve: {
+      alias: {
+        "@assets": resolve("./src/assets"),
+      },
+    },
+  },
 });

@@ -1,0 +1,317 @@
+import { slug } from 'github-slugger';
+import path from 'node:path';
+import type { PathMapping } from './github.types.js';
+
+/**
+ * Represents an imported file with its content and metadata
+ */
+export interface ImportedFile {
+  /** Original source path in the repository */
+  sourcePath: string;
+  /** Target path where the file will be written */
+  targetPath: string;
+  /** File content */
+  content: string;
+  /** File ID for cross-referencing */
+  id: string;
+}
+
+/**
+ * Context for global link transformation
+ */
+interface GlobalLinkContext {
+  /** Map from source paths to target paths for all imported files */
+  sourceToTargetMap: Map<string, string>;
+  /** Map from source paths to file IDs */
+  sourceToIdMap: Map<string, string>;
+  /** Base paths to strip from final URLs (e.g., "src/content/docs") */
+  stripPrefixes: string[];
+  /** Custom handlers for special link types */
+  customHandlers?: LinkHandler[];
+  /** Path mappings for common transformations */
+  pathMappings?: PathMapping[];
+}
+
+/**
+ * Custom handler for specific link patterns
+ */
+export interface LinkHandler {
+  /** Test if this handler should process the link */
+  test: (link: string, context: LinkContext) => boolean;
+  /** Transform the link */
+  transform: (link: string, context: LinkContext) => string;
+}
+
+/**
+ * Context for individual link transformation
+ */
+interface LinkContext {
+  /** The file containing the link */
+  currentFile: ImportedFile;
+  /** The original link text */
+  originalLink: string;
+  /** Any anchor/fragment in the link */
+  anchor: string;
+  /** Global context */
+  global: GlobalLinkContext;
+}
+
+/**
+ * Extract anchor fragment from a link
+ */
+function extractAnchor(link: string): { path: string; anchor: string } {
+  const anchorMatch = link.match(/#.*$/);
+  const anchor = anchorMatch ? anchorMatch[0] : '';
+  const path = link.replace(/#.*$/, '');
+  return { path, anchor };
+}
+
+/**
+ * Check if a link is external (should not be transformed)
+ * External links are left completely unchanged by all transformations
+ */
+function isExternalLink(link: string): boolean {
+  return (
+    // Common protocols
+    /^https?:\/\//.test(link) ||
+    /^mailto:/.test(link) ||
+    /^tel:/.test(link) ||
+    /^ftp:/.test(link) ||
+    /^ftps:\/\//.test(link) ||
+
+    // Any protocol with ://
+    link.includes('://') ||
+
+    // Anchor-only links (same page)
+    link.startsWith('#') ||
+
+    // Data URLs
+    /^data:/.test(link) ||
+
+    // File protocol
+    /^file:\/\//.test(link)
+  );
+}
+
+/**
+ * Normalize path separators and resolve relative paths
+ */
+function normalizePath(linkPath: string, currentFilePath: string): string {
+  // Handle relative paths
+  if (linkPath.startsWith('./') || linkPath.includes('../')) {
+    const currentDir = path.dirname(currentFilePath);
+    return path.posix.normalize(path.posix.join(currentDir, linkPath));
+  }
+
+  // Remove leading './'
+  if (linkPath.startsWith('./')) {
+    return linkPath.slice(2);
+  }
+
+  return linkPath;
+}
+
+/**
+ * Apply path mappings to a link
+ */
+function applyPathMappings(
+  linkUrl: string,
+  pathMappings: PathMapping[],
+  context: LinkContext
+): string {
+  const { path: linkPath, anchor } = extractAnchor(linkUrl);
+  let transformedPath = linkPath;
+
+  for (const mapping of pathMappings) {
+    let matched = false;
+    let replacement = '';
+
+    if (typeof mapping.pattern === 'string') {
+      // String pattern - exact match or contains
+      if (transformedPath.includes(mapping.pattern)) {
+        matched = true;
+        if (typeof mapping.replacement === 'string') {
+          replacement = transformedPath.replace(mapping.pattern, mapping.replacement);
+        } else {
+          replacement = mapping.replacement(transformedPath, anchor, context);
+        }
+      }
+    } else {
+      // RegExp pattern
+      const match = transformedPath.match(mapping.pattern);
+      if (match) {
+        matched = true;
+        if (typeof mapping.replacement === 'string') {
+          replacement = transformedPath.replace(mapping.pattern, mapping.replacement);
+        } else {
+          replacement = mapping.replacement(transformedPath, anchor, context);
+        }
+      }
+    }
+
+    if (matched) {
+      // Apply the transformation and continue with next mapping
+      transformedPath = replacement;
+      // Note: We continue applying other mappings to allow chaining
+    }
+  }
+
+  return transformedPath + anchor;
+}
+
+/**
+ * Convert a target path to a Starlight-compatible URL
+ */
+function pathToStarlightUrl(targetPath: string, stripPrefixes: string[]): string {
+  let url = targetPath;
+
+  // Strip configured prefixes
+  for (const prefix of stripPrefixes) {
+    if (url.startsWith(prefix)) {
+      url = url.slice(prefix.length);
+      break;
+    }
+  }
+
+  // Remove leading slash if present
+  url = url.replace(/^\//, '');
+
+  // Remove file extension
+  url = url.replace(/\.(md|mdx)$/i, '');
+
+  // Handle index files - they should resolve to parent directory
+  if (url.endsWith('/index')) {
+    url = url.replace('/index', '');
+  } else if (url === 'index') {
+    url = '';
+  }
+
+  // Split path into segments and slugify each
+  const segments = url.split('/').map(segment => segment ? slug(segment) : '');
+
+  // Reconstruct URL
+  url = segments.filter(s => s).join('/');
+
+  // Ensure leading slash
+  if (url && !url.startsWith('/')) {
+    url = '/' + url;
+  }
+
+  // Add trailing slash for non-empty paths
+  if (url && !url.endsWith('/')) {
+    url = url + '/';
+  }
+
+  return url || '/';
+}
+
+/**
+ * Transform a single markdown link
+ */
+function transformLink(linkText: string, linkUrl: string, context: LinkContext): string {
+  // Skip external links FIRST - no transformations should ever be applied to them
+  if (isExternalLink(linkUrl)) {
+    return `[${linkText}](${linkUrl})`;
+  }
+
+  let processedUrl = linkUrl;
+
+  // Apply global path mappings (only to non-external links)
+  if (context.global.pathMappings) {
+    const globalMappings = context.global.pathMappings.filter(m => m.global);
+    if (globalMappings.length > 0) {
+      processedUrl = applyPathMappings(processedUrl, globalMappings, context);
+    }
+  }
+
+  const { path: linkPath, anchor } = extractAnchor(processedUrl);
+
+  // Normalize the link path relative to current file
+  const normalizedPath = normalizePath(linkPath, context.currentFile.sourcePath);
+
+  // Check if this links to an imported file
+  const targetPath = context.global.sourceToTargetMap.get(normalizedPath);
+
+  if (targetPath) {
+    // This is an internal link to an imported file
+    const starlightUrl = pathToStarlightUrl(targetPath, context.global.stripPrefixes);
+    return `[${linkText}](${starlightUrl}${anchor})`;
+  }
+
+  // Apply non-global path mappings to unresolved links
+  if (context.global.pathMappings) {
+    const nonGlobalMappings = context.global.pathMappings.filter(m => !m.global);
+    if (nonGlobalMappings.length > 0) {
+      const mappedUrl = applyPathMappings(processedUrl, nonGlobalMappings, context);
+      if (mappedUrl !== processedUrl) {
+        return `[${linkText}](${mappedUrl})`;
+      }
+    }
+  }
+
+  // Check custom handlers
+  if (context.global.customHandlers) {
+    for (const handler of context.global.customHandlers) {
+      if (handler.test(processedUrl, context)) {
+        const transformedUrl = handler.transform(processedUrl, context);
+        return `[${linkText}](${transformedUrl})`;
+      }
+    }
+  }
+
+  // No transformation needed - return processed URL
+  return `[${linkText}](${processedUrl})`;
+}
+
+/**
+ * Global link transformation function
+ * Processes all imported files and resolves internal links
+ */
+export function globalLinkTransform(
+  importedFiles: ImportedFile[],
+  options: {
+    stripPrefixes: string[];
+    customHandlers?: LinkHandler[];
+    pathMappings?: PathMapping[];
+  }
+): ImportedFile[] {
+  // Build global context
+  const sourceToTargetMap = new Map<string, string>();
+  const sourceToIdMap = new Map<string, string>();
+
+  for (const file of importedFiles) {
+    sourceToTargetMap.set(file.sourcePath, file.targetPath);
+    sourceToIdMap.set(file.sourcePath, file.id);
+  }
+
+  const globalContext: GlobalLinkContext = {
+    sourceToTargetMap,
+    sourceToIdMap,
+    stripPrefixes: options.stripPrefixes,
+    customHandlers: options.customHandlers,
+    pathMappings: options.pathMappings,
+  };
+
+  // Transform links in all files
+  const markdownLinkRegex = /\[([^\]]*)\]\(([^)]+)\)/g;
+
+  return importedFiles.map(file => ({
+    ...file,
+    content: file.content.replace(markdownLinkRegex, (match, linkText, linkUrl) => {
+      const linkContext: LinkContext = {
+        currentFile: file,
+        originalLink: linkUrl,
+        anchor: extractAnchor(linkUrl).anchor,
+        global: globalContext,
+      };
+
+      return transformLink(linkText, linkUrl, linkContext);
+    }),
+  }));
+}
+
+
+/**
+ * Export types for use in configuration
+ */
+export type { LinkContext, GlobalLinkContext };

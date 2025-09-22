@@ -5,31 +5,57 @@ import { docsSchema } from "@astrojs/starlight/schema";
 import { Octokit } from "octokit";
 import {
   githubLoader,
-  ImportOptions,
-  LoaderContext,
+  type ImportOptions,
+  type LoaderContext,
 } from "@larkiny/astro-github-loader";
+import { createStarlightPathMappings } from "../imports/transforms/links.js";
+import { convertH1ToTitle } from "../imports/transforms/common.js";
+import {
+  createFrontmatterTransform,
+  createPathBasedFrontmatterTransform,
+} from "../imports/transforms/frontmatter.js";
 
 const REMOTE_CONTENT: ImportOptions[] = [
   {
-    name: "Algokit CLI Docs",
+    name: "AlgoKit CLI Docs",
     owner: "larkiny",
     repo: "algokit-cli-docs",
-    ref: "docs/starlight-preview",
-    path: ".devportal/starlight",
-    replace: ".devportal/starlight/",
-    basePath: "src/content/docs/StaticDocs/imports",
-    assetsPath: "src/assets/imports/algokit-cli",
-    assetsBaseUrl: "~/assets/imports/algokit-cli",
-    assetPatterns: [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"],
-    fileRenames: [
-      { from: "references/index.mdx", to: "references/overview.mdx" },
+    assetsPath: "src/assets/imports/algokit/cli",
+    assetsBaseUrl: "@assets/imports/algokit/cli",
+    includes: [
+      {
+        pattern: "docs/{features/**,algokit.md}",
+        basePath: "src/content/docs/algokit/cli",
+        // rename: {
+        //   "docs/algokit.md": "overview.md",
+        // },
+        transforms: [
+          createPathBasedFrontmatterTransform("docs/algokit.md", {
+            frontmatter: {
+              title: "AlgoKit CLI Overview",
+              slug: "algokit/cli/algokit",
+              sidebar: { label: "Overview", order: 0 },
+            },
+            mode: "merge",
+            preserveExisting: false,
+          }),
+        ],
+      },
+      {
+        pattern: "docs/cli/index.md",
+        basePath: "src/content/docs/reference/algokit-cli/",
+      },
     ],
-    clear: false,
+    transforms: [convertH1ToTitle],
+    linkTransform: {
+      stripPrefixes: ["src/content/docs"],
+      pathMappings: createStarlightPathMappings(),
+    },
     enabled: true,
   },
 ];
 
-const IMPORT_REMOTE = true;
+const IMPORT_REMOTE = process.env.IMPORT_GITHUB === "true";
 const GITHUB_API_CLIENT = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
 const IS_DRY_RUN = process.env.IMPORT_DRY_RUN === "true";
 

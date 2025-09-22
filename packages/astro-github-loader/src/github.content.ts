@@ -2,6 +2,7 @@ import { existsSync, promises as fs } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join, dirname, basename, extname } from "node:path";
 import picomatch from "picomatch";
+import { globalLinkTransform, type ImportedFile } from "./github.link-transform.js";
 
 import {
   INVALID_SERVICE_RESPONSE,
@@ -33,10 +34,11 @@ export function generateId(filePath: string): string {
  * Generates a local file path based on the matched pattern and file path
  * @param filePath - The original file path from the repository
  * @param matchedPattern - The pattern that matched this file (or null if no includes specified)
+ * @param options - Import options containing includes patterns for rename lookups
  * @return {string} The local file path where this content should be stored
  * @internal
  */
-export function generatePath(filePath: string, matchedPattern?: MatchedPattern | null): string {
+export function generatePath(filePath: string, matchedPattern?: MatchedPattern | null, options?: ImportOptions): string {
   if (matchedPattern) {
     // Extract the directory part from the pattern (before any glob wildcards)
     const pattern = matchedPattern.pattern;
@@ -56,7 +58,18 @@ export function generatePath(filePath: string, matchedPattern?: MatchedPattern |
     if (!relativePath) {
       relativePath = basename(filePath);
     }
-    
+
+    // Check for file renaming
+    if (options?.includes && matchedPattern.index < options.includes.length) {
+      const includePattern = options.includes[matchedPattern.index];
+      if (includePattern.rename && includePattern.rename[filePath]) {
+        // Replace the filename in relativePath with the renamed filename
+        const dirPart = dirname(relativePath);
+        const newFilename = includePattern.rename[filePath];
+        relativePath = dirPart === '.' ? newFilename : join(dirPart, newFilename);
+      }
+    }
+
     return join(matchedPattern.basePath, relativePath);
   }
   
@@ -402,9 +415,9 @@ export async function syncEntry(
   let res = await fetch(url, init);
 
   if (res.status === 304) {
-    // Only skip if the local file actually exists  
+    // Only skip if the local file actually exists
     const includeResult = shouldIncludeFile(filePath, options);
-    const relativePath = generatePath(filePath, includeResult.included ? includeResult.matchedPattern : null);
+    const relativePath = generatePath(filePath, includeResult.included ? includeResult.matchedPattern : null, options);
     const fileUrl = pathToFileURL(relativePath);
     
     if (existsSync(fileURLToPath(fileUrl))) {
@@ -473,7 +486,7 @@ export async function syncEntry(
   }
 
   const includeResult = shouldIncludeFile(filePath, options);
-  const relativePath = generatePath(filePath, includeResult.included ? includeResult.matchedPattern : null);
+  const relativePath = generatePath(filePath, includeResult.included ? includeResult.matchedPattern : null, options);
   const fileUrl = pathToFileURL(relativePath);
   const { body, data } = await entryType.getEntryInfo({
     contents,
@@ -577,15 +590,307 @@ export async function toCollectionEntry({
     directoriesToScan.add('');
   }
 
-  // Process each directory that matches our include patterns sequentially
-  const results = [];
-  
+  // Collect all files first (with content transforms applied)
+  const allFiles: ImportedFile[] = [];
+
   for (const dirPath of directoriesToScan) {
-    const result = await processDirectoryRecursively(dirPath);
+    const files = await collectFilesRecursively(dirPath);
+    allFiles.push(...files);
+  }
+
+  // Apply link transformation if configured
+  let processedFiles = allFiles;
+  if (options.linkTransform) {
+    context.logger?.info(`Applying link transformation to ${allFiles.length} files`);
+    processedFiles = globalLinkTransform(allFiles, {
+      stripPrefixes: options.linkTransform.stripPrefixes,
+      customHandlers: options.linkTransform.customHandlers,
+      pathMappings: options.linkTransform.pathMappings,
+    });
+  }
+
+  // Now store all processed files
+  const results = [];
+  for (const file of processedFiles) {
+    const result = await storeProcessedFile(file, context, options);
     results.push(result);
   }
-  
+
   return results;
+
+  // Helper function to collect files without storing them
+  async function collectFilesRecursively(path: string): Promise<ImportedFile[]> {
+    const collectedFiles: ImportedFile[] = [];
+
+    // Fetch the content
+    const { data, status } = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path,
+      ref,
+      request: { signal },
+    });
+    if (status !== 200) throw new Error(INVALID_SERVICE_RESPONSE);
+
+    // Handle single file
+    if (!Array.isArray(data)) {
+      const filePath = data.path;
+      if (data.type === "file") {
+        const fileData = await collectFileData(
+          { url: data.download_url, editUrl: data.url },
+          filePath
+        );
+        if (fileData) {
+          collectedFiles.push(fileData);
+        }
+      }
+      return collectedFiles;
+    }
+
+    // Directory listing - process files and recurse into subdirectories
+    const filteredEntries = data
+      .filter(({ type, path }) => {
+        // Always include directories for recursion
+        if (type === "dir") return true;
+        // Apply filtering logic to files
+        if (type === "file") {
+          return shouldIncludeFile(path, options).included;
+        }
+        return false;
+      });
+
+    for (const { type, path, download_url, url } of filteredEntries) {
+      if (type === "dir") {
+        // Recurse into subdirectory
+        const subDirFiles = await collectFilesRecursively(path);
+        collectedFiles.push(...subDirFiles);
+      } else if (type === "file") {
+        // Process file
+        const fileData = await collectFileData(
+          { url: download_url, editUrl: url },
+          path
+        );
+        if (fileData) {
+          collectedFiles.push(fileData);
+        }
+      }
+    }
+
+    return collectedFiles;
+  }
+
+  // Helper function to collect file data with content transforms applied
+  async function collectFileData(
+    { url, editUrl }: { url: string | null; editUrl: string },
+    filePath: string
+  ): Promise<ImportedFile | null> {
+    if (url === null || typeof url !== "string") {
+      return null;
+    }
+
+    const urlObj = new URL(url);
+    const id = generateId(filePath);
+    let contents: string;
+
+    console.log(`🔄 Fetching file: ${filePath} from ${urlObj.toString()}`);
+
+    // Download file content
+    const init = { signal, headers: getHeaders({ init: {}, meta: context.meta, id }) };
+    let res: Response | null = null;
+
+    // Fetch with retries (simplified version of syncEntry logic)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        res = await fetch(urlObj, init);
+        if (res.ok) break;
+      } catch (error) {
+        if (attempt === 2) throw error;
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
+
+    if (!res) {
+      throw new Error(`No response received for ${urlObj.toString()}`);
+    }
+
+    if (res.status === 304) {
+      // File not modified, read existing content from disk if it exists
+      const includeResult = shouldIncludeFile(filePath, options);
+      const relativePath = generatePath(filePath, includeResult.included ? includeResult.matchedPattern : null, options);
+      const fileUrl = pathToFileURL(relativePath);
+
+      if (existsSync(fileURLToPath(fileUrl))) {
+        console.log(`⏭️  Using cached content for ${filePath} (304)`);
+        const { promises: fs } = await import('node:fs');
+        contents = await fs.readFile(fileURLToPath(fileUrl), 'utf-8');
+      } else {
+        // File is missing locally, re-fetch without cache headers
+        console.log(`🔄 File ${filePath} missing locally, re-fetching despite 304`);
+        const freshInit = { ...init };
+        freshInit.headers = new Headers(init.headers);
+        freshInit.headers.delete('If-None-Match');
+        freshInit.headers.delete('If-Modified-Since');
+
+        res = await fetch(urlObj, freshInit);
+        if (!res.ok) {
+          throw new Error(`Failed to fetch file content from ${urlObj.toString()}: ${res.status} ${res.statusText || 'Unknown error'}`);
+        }
+        contents = await res.text();
+      }
+    } else if (!res.ok) {
+      throw new Error(`Failed to fetch file content from ${urlObj.toString()}: ${res.status} ${res.statusText || 'Unknown error'}`);
+    } else {
+      contents = await res.text();
+    }
+
+    // Process assets FIRST if configuration is provided
+    if (options.assetsPath && options.assetsBaseUrl) {
+      try {
+        contents = await processAssets(contents, filePath, options, octokit, signal);
+      } catch (error) {
+        context.logger?.warn(`Asset processing failed for ${id}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    // Apply content transforms
+    const includeResult = shouldIncludeFile(filePath, options);
+    const transformsToApply: any[] = [];
+
+    // Add global transforms first
+    if (options.transforms && options.transforms.length > 0) {
+      transformsToApply.push(...options.transforms);
+    }
+
+    // Add pattern-specific transforms
+    if (includeResult.included && includeResult.matchedPattern && options.includes) {
+      const matchedInclude = options.includes[includeResult.matchedPattern.index];
+      if (matchedInclude.transforms && matchedInclude.transforms.length > 0) {
+        transformsToApply.push(...matchedInclude.transforms);
+      }
+    }
+
+    if (transformsToApply.length > 0) {
+      const transformContext = {
+        id,
+        path: filePath,
+        options,
+        matchedPattern: includeResult.included ? includeResult.matchedPattern : undefined,
+      };
+
+      for (const transform of transformsToApply) {
+        try {
+          contents = transform(contents, transformContext);
+        } catch (error) {
+          context.logger?.warn(`Transform failed for ${id}: ${error}`);
+        }
+      }
+    }
+
+    // Generate target path
+    const relativePath = generatePath(filePath, includeResult.included ? includeResult.matchedPattern : null, options);
+
+    return {
+      sourcePath: filePath,
+      targetPath: relativePath,
+      content: contents,
+      id,
+    };
+  }
+
+  // Helper function to store a processed file
+  async function storeProcessedFile(
+    file: ImportedFile,
+    context: any,
+    options: ImportOptions
+  ): Promise<any> {
+    const { store, generateDigest, entryTypes, logger, parseData, config } = context;
+
+    function configForFile(filePath: string) {
+      const ext = filePath.split(".").at(-1);
+      if (!ext) {
+        logger.warn(`No extension found for ${filePath}`);
+        return;
+      }
+      return entryTypes?.get(`.${ext}`);
+    }
+
+    const entryType = configForFile(file.sourcePath || "tmp.md");
+    if (!entryType) throw new Error("No entry type found");
+
+    const fileUrl = pathToFileURL(file.targetPath);
+    const { body, data } = await entryType.getEntryInfo({
+      contents: file.content,
+      fileUrl: fileUrl,
+    });
+
+    const existingEntry = store.get(file.id);
+    const digest = generateDigest(file.content);
+
+    if (
+      existingEntry &&
+      existingEntry.digest === digest &&
+      existingEntry.filePath
+    ) {
+      return; // No changes, skip
+    }
+
+    // Write file to disk
+    if (!existsSync(fileURLToPath(fileUrl))) {
+      logger.info(`Writing ${file.id} to ${fileUrl}`);
+      await syncFile(fileURLToPath(fileUrl), file.content);
+    }
+
+    const parsedData = await parseData({
+      id: file.id,
+      data,
+      filePath: fileUrl.toString(),
+    });
+
+    // Store in content store
+    if (entryType.getRenderFunction) {
+      logger.info(`Rendering ${file.id}`);
+      const render = await entryType.getRenderFunction(config);
+      let rendered = undefined;
+      try {
+        rendered = await render?.({
+          id: file.id,
+          data,
+          body,
+          filePath: fileUrl.toString(),
+          digest,
+        });
+      } catch (error: any) {
+        logger.error(`Error rendering ${file.id}: ${error.message}`);
+      }
+      store.set({
+        id: file.id,
+        data: parsedData,
+        body,
+        filePath: file.targetPath,
+        digest,
+        rendered,
+      });
+    } else if ("contentModuleTypes" in entryType) {
+      store.set({
+        id: file.id,
+        data: parsedData,
+        body,
+        filePath: file.targetPath,
+        digest,
+        deferredRender: true,
+      });
+    } else {
+      store.set({
+        id: file.id,
+        data: parsedData,
+        body,
+        filePath: file.targetPath,
+        digest
+      });
+    }
+
+    return { id: file.id, filePath: file.targetPath };
+  }
 
   async function processDirectoryRecursively(path: string): Promise<any> {
     // Fetch the content

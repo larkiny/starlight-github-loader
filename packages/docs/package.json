@@ -5,9 +5,12 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
+    "dev:fresh": "npm run clean && npm run import:github && astro dev",
+    "build:loader": "cd ../astro-github-loader && npm run build",
     "build": "astro build",
-    "clean": "rm -rf src/content/docs/StaticDocs src/content/docs/StaticDocs/references src/content/docs/typedoc .astro",
+    "clean": "rm -rf src/content/docs/algokit/cli src/content/docs/reference/algokit-cli src/assets/imports/algokit-cli .astro",
     "import:dry-run": "IMPORT_DRY_RUN=true astro sync",
+    "import:github": "IMPORT_GITHUB=true astro sync",
     "lint": "eslint .",
     "prettier": "prettier --check .",
     "preview": "astro preview",
@@ -16,7 +19,7 @@
   "dependencies": {
     "@astrojs/mdx": "^4.2.3",
     "@astrojs/starlight": "^0.32.5",
-    "@larkiny/astro-github-loader": "*",
+    "@larkiny/astro-github-loader": "file:../astro-github-loader",
     "astro": "^5.5.6",
     "emoji-regex-xs": "^1.0.0",
     "picomatch": "^4.0.2"

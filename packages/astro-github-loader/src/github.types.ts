@@ -6,6 +6,35 @@ import type { ContentEntryType } from "astro";
 import type {MarkdownHeading} from "@astrojs/markdown-remark";
 import {Octokit} from "octokit";
 
+// Import link transformation types from the dedicated module
+import type { LinkHandler } from "./github.link-transform.js";
+
+/**
+ * Path mapping for common link transformations
+ */
+export interface PathMapping {
+  /** Pattern to match (string or regex) */
+  pattern: string | RegExp;
+  /** Replacement string or function */
+  replacement: string | ((match: string, anchor: string, context: any) => string);
+  /** Apply to all links, not just unresolved internal links (default: false) */
+  global?: boolean;
+  /** Description for debugging (optional) */
+  description?: string;
+}
+
+/**
+ * Configuration for import link transformation
+ */
+export interface ImportLinkTransformOptions {
+  /** Base paths to strip from final URLs (e.g., ["src/content/docs"]) */
+  stripPrefixes: string[];
+  /** Custom handlers for special link types */
+  customHandlers?: LinkHandler[];
+  /** Path mappings for common transformations */
+  pathMappings?: PathMapping[];
+}
+
 /**
  * Information about which include pattern matched a file
  */
@@ -50,6 +79,8 @@ export interface IncludePattern {
   basePath: string;
   /** Transforms to apply only to files matching this pattern */
   transforms?: TransformFunction[];
+  /** Map of source paths to target filenames for renaming files */
+  rename?: Record<string, string>;
 }
 
 
@@ -182,6 +213,11 @@ export type ImportOptions = {
    * If not specified, all files will be imported (backward compatibility mode)
    */
   includes?: IncludePattern[];
+  /**
+   * Link transformation options
+   * Applied after all content transforms and across all include patterns
+   */
+  linkTransform?: ImportLinkTransformOptions;
 };
 
 export type FetchOptions = RequestInit & {

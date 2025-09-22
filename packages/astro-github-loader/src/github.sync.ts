@@ -112,7 +112,7 @@ async function discoverRemoteFiles(
         if (data.type === 'file' && shouldIncludeFile(data.path, options).included) {
           const id = generateId(data.path);
           const includeResult = shouldIncludeFile(data.path, options);
-          const localPath = generatePath(data.path, includeResult.included ? includeResult.matchedPattern : null);
+          const localPath = generatePath(data.path, includeResult.included ? includeResult.matchedPattern : null, options);
           
           files.set(id, {
             path: data.path,
@@ -137,7 +137,7 @@ async function discoverRemoteFiles(
           } else if (type === "file") {
             const id = generateId(itemPath);
             const includeResult = shouldIncludeFile(itemPath, options);
-            const localPath = generatePath(itemPath, includeResult.included ? includeResult.matchedPattern : null);
+            const localPath = generatePath(itemPath, includeResult.included ? includeResult.matchedPattern : null, options);
             
             files.set(id, {
               path: itemPath,
