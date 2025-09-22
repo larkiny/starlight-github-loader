@@ -35,8 +35,14 @@ title: AlgoKit CLI Reference Documentation
     - [-f, --force](#-f---force)
     - [Arguments](#arguments-4)
     - [ENGINE](#engine)
-    - [version-prompt](#version-prompt)
+    - [js-package-manager](#js-package-manager)
     - [Arguments](#arguments-5)
+    - [PACKAGE_MANAGER](#package_manager)
+    - [py-package-manager](#py-package-manager)
+    - [Arguments](#arguments-6)
+    - [PACKAGE_MANAGER](#package_manager-1)
+    - [version-prompt](#version-prompt)
+    - [Arguments](#arguments-7)
     - [ENABLE](#enable)
   - [dispenser](#dispenser)
     - [fund](#fund)
@@ -60,7 +66,7 @@ title: AlgoKit CLI Reference Documentation
     - [Options](#options-9)
     - [-c, --copy-to-clipboard](#-c---copy-to-clipboard)
   - [explore](#explore)
-    - [Arguments](#arguments-6)
+    - [Arguments](#arguments-8)
     - [NETWORK](#network)
   - [generate](#generate)
     - [client](#client)
@@ -68,13 +74,14 @@ title: AlgoKit CLI Reference Documentation
     - [-o, --output ](#-o---output--1)
     - [-l, --language ](#-l---language-)
     - [-v, --version ](#-v---version--1)
-    - [Arguments](#arguments-7)
+    - [Arguments](#arguments-9)
     - [APP_SPEC_PATH_OR_DIR](#app_spec_path_or_dir)
+    - [ARGS](#args)
   - [goal](#goal)
     - [Options](#options-11)
     - [--console](#--console)
     - [--interactive](#--interactive)
-    - [Arguments](#arguments-8)
+    - [Arguments](#arguments-10)
     - [GOAL_ARGS](#goal_args)
   - [init](#init)
     - [Options](#options-12)
@@ -89,9 +96,14 @@ title: AlgoKit CLI Reference Documentation
     - [--ide, --no-ide](#--ide---no-ide)
     - [--workspace, --no-workspace](#--workspace---no-workspace)
     - [-a, --answer  ](#-a---answer--)
+    - [example](#example)
+    - [Options](#options-13)
+    - [-l, --list](#-l---list)
+    - [Arguments](#arguments-11)
+    - [EXAMPLE_ID](#example_id)
   - [localnet](#localnet)
     - [codespace](#codespace)
-    - [Options](#options-13)
+    - [Options](#options-14)
     - [-m, --machine ](#-m---machine-)
     - [-a, --algod-port ](#-a---algod-port-)
     - [-i, --indexer-port ](#-i---indexer-port-)
@@ -101,22 +113,22 @@ title: AlgoKit CLI Reference Documentation
     - [-t, --timeout ](#-t---timeout-)
     - [-f, --force](#-f---force-1)
     - [config](#config-1)
-    - [Options](#options-14)
+    - [Options](#options-15)
     - [-f, --force](#-f---force-2)
-    - [Arguments](#arguments-9)
+    - [Arguments](#arguments-12)
     - [ENGINE](#engine-1)
     - [console](#console)
     - [explore](#explore-1)
     - [logs](#logs)
-    - [Options](#options-15)
+    - [Options](#options-16)
     - [--follow, -f](#--follow--f)
     - [--tail ](#--tail-)
     - [reset](#reset)
-    - [Options](#options-16)
+    - [Options](#options-17)
     - [--update, --no-update](#--update---no-update)
     - [-P, --config-dir ](#-p---config-dir-)
     - [start](#start)
-    - [Options](#options-17)
+    - [Options](#options-18)
     - [-n, --name ](#-n---name--1)
     - [-P, --config-dir ](#-p---config-dir--1)
     - [-d, --dev, --no-dev](#-d---dev---no-dev)
@@ -125,54 +137,56 @@ title: AlgoKit CLI Reference Documentation
     - [stop](#stop)
   - [project](#project)
     - [bootstrap](#bootstrap)
-    - [Options](#options-18)
-    - [--force](#--force-1)
     - [Options](#options-19)
+    - [--force](#--force-1)
+    - [Options](#options-20)
     - [--interactive, --no-ci, --non-interactive, --ci](#--interactive---no-ci---non-interactive---ci)
     - [-p, --project-name ](#-p---project-name-)
     - [-t, --type ](#-t---type-)
-    - [Options](#options-20)
-    - [--interactive, --non-interactive, --ci](#--interactive---non-interactive---ci)
     - [Options](#options-21)
-    - [--ci, --no-ci](#--ci---no-ci)
-    - [deploy](#deploy)
+    - [--interactive, --non-interactive, --ci](#--interactive---non-interactive---ci)
     - [Options](#options-22)
+    - [--ci, --no-ci](#--ci---no-ci)
+    - [Options](#options-23)
+    - [--ci, --no-ci](#--ci---no-ci-1)
+    - [deploy](#deploy)
+    - [Options](#options-24)
     - [-C, -c, --command ](#-c--c---command-)
     - [--interactive, --non-interactive, --ci](#--interactive---non-interactive---ci-1)
     - [-P, --path ](#-p---path-)
     - [--deployer ](#--deployer-)
     - [--dispenser ](#--dispenser-)
     - [-p, --project-name ](#-p---project-name--1)
-    - [Arguments](#arguments-10)
+    - [Arguments](#arguments-13)
     - [ENVIRONMENT_NAME](#environment_name)
     - [EXTRA_ARGS](#extra_args)
     - [link](#link)
-    - [Options](#options-23)
+    - [Options](#options-25)
     - [-p, --project-name ](#-p---project-name--2)
     - [-l, --language ](#-l---language--1)
     - [-a, --all](#-a---all)
     - [-f, --fail-fast](#-f---fail-fast)
     - [-v, --version ](#-v---version--2)
     - [list](#list)
-    - [Arguments](#arguments-11)
+    - [Arguments](#arguments-14)
     - [WORKSPACE_PATH](#workspace_path)
     - [run](#run)
   - [task](#task)
     - [analyze](#analyze)
-    - [Options](#options-24)
+    - [Options](#options-26)
     - [-r, --recursive](#-r---recursive)
     - [--force](#--force-2)
     - [--diff](#--diff)
     - [-o, --output ](#-o---output--2)
     - [-e, --exclude ](#-e---exclude-)
-    - [Arguments](#arguments-12)
+    - [Arguments](#arguments-15)
     - [INPUT_PATHS](#input_paths)
     - [ipfs](#ipfs)
-    - [Options](#options-25)
+    - [Options](#options-27)
     - [-f, --file ](#-f---file--1)
     - [-n, --name ](#-n---name--2)
     - [mint](#mint)
-    - [Options](#options-26)
+    - [Options](#options-28)
     - [--creator ](#--creator-)
     - [--name ](#--name-)
     - [-u, --unit ](#-u---unit-)
@@ -184,37 +198,37 @@ title: AlgoKit CLI Reference Documentation
     - [--mutable, --immutable](#--mutable---immutable)
     - [-n, --network ](#-n---network-)
     - [nfd-lookup](#nfd-lookup)
-    - [Options](#options-27)
+    - [Options](#options-29)
     - [-o, --output ](#-o---output--3)
-    - [Arguments](#arguments-13)
+    - [Arguments](#arguments-16)
     - [VALUE](#value)
     - [opt-in](#opt-in)
-    - [Options](#options-28)
+    - [Options](#options-30)
     - [-a, --account ](#-a---account-)
     - [-n, --network ](#-n---network--1)
-    - [Arguments](#arguments-14)
+    - [Arguments](#arguments-17)
     - [ASSET_IDS](#asset_ids)
     - [opt-out](#opt-out)
-    - [Options](#options-29)
+    - [Options](#options-31)
     - [-a, --account ](#-a---account--1)
     - [--all](#--all)
     - [-n, --network ](#-n---network--2)
-    - [Arguments](#arguments-15)
+    - [Arguments](#arguments-18)
     - [ASSET_IDS](#asset_ids-1)
     - [send](#send)
-    - [Options](#options-30)
+    - [Options](#options-32)
     - [-f, --file ](#-f---file--2)
     - [-t, --transaction ](#-t---transaction-)
     - [-n, --network ](#-n---network--3)
     - [sign](#sign)
-    - [Options](#options-31)
+    - [Options](#options-33)
     - [-a, --account ](#-a---account--2)
     - [-f, --file ](#-f---file--3)
     - [-t, --transaction ](#-t---transaction--1)
     - [-o, --output ](#-o---output--4)
     - [--force](#--force-3)
     - [transfer](#transfer)
-    - [Options](#options-32)
+    - [Options](#options-34)
     - [-s, --sender ](#-s---sender-)
     - [-r, --receiver ](#-r---receiver--1)
     - [--asset, --id ](#--asset---id-)
@@ -222,28 +236,28 @@ title: AlgoKit CLI Reference Documentation
     - [--whole-units](#--whole-units-2)
     - [-n, --network ](#-n---network--4)
     - [vanity-address](#vanity-address)
-    - [Options](#options-33)
+    - [Options](#options-35)
     - [-m, --match ](#-m---match-)
     - [-o, --output ](#-o---output--5)
     - [-a, --alias ](#-a---alias-)
     - [--file-path ](#--file-path-)
     - [-f, --force](#-f---force-3)
-    - [Arguments](#arguments-16)
+    - [Arguments](#arguments-19)
     - [KEYWORD](#keyword)
     - [wallet](#wallet)
-    - [Options](#options-34)
+    - [Options](#options-36)
     - [-a, --address ](#-a---address-)
     - [-m, --mnemonic](#-m---mnemonic)
     - [-f, --force](#-f---force-4)
-    - [Arguments](#arguments-17)
+    - [Arguments](#arguments-20)
     - [ALIAS_NAME](#alias_name)
-    - [Arguments](#arguments-18)
+    - [Arguments](#arguments-21)
     - [ALIAS](#alias)
-    - [Options](#options-35)
+    - [Options](#options-37)
     - [-f, --force](#-f---force-5)
-    - [Arguments](#arguments-19)
+    - [Arguments](#arguments-22)
     - [ALIAS](#alias-1)
-    - [Options](#options-36)
+    - [Options](#options-38)
     - [-f, --force](#-f---force-6)
 
 # algokit
@@ -424,6 +438,34 @@ Skip confirmation prompts. Defaults to 'yes' to all prompts.
 ### ENGINE
 Optional argument
 
+### js-package-manager
+
+Set the default JavaScript package manager for use by AlgoKit CLI.
+
+```shell
+algokit config js-package-manager [OPTIONS] [[npm|pnpm]]
+```
+
+### Arguments
+
+
+### PACKAGE_MANAGER
+Optional argument
+
+### py-package-manager
+
+Set the default Python package manager for use by AlgoKit CLI.
+
+```shell
+algokit config py-package-manager [OPTIONS] [[poetry|uv]]
+```
+
+### Arguments
+
+
+### PACKAGE_MANAGER
+Optional argument
+
 ### version-prompt
 
 Controls whether AlgoKit checks and prompts for new versions.
@@ -583,7 +625,7 @@ Supply the path to an application specification file or a directory to recursive
 for "application.json" files
 
 ```shell
-algokit generate client [OPTIONS] APP_SPEC_PATH_OR_DIR
+algokit generate client [OPTIONS] [APP_SPEC_PATH_OR_DIR] [ARGS]...
 ```
 
 ### Options
@@ -610,7 +652,11 @@ The client generator version to pin to, for example, 1.0.0. If no version is spe
 
 
 ### APP_SPEC_PATH_OR_DIR
-Required argument
+Optional argument
+
+
+### ARGS
+Optional argument(s)
 
 ## goal
 
@@ -659,7 +705,7 @@ the new project is created in a standalone target directory. This is
 suitable for isolated projects or when workspace integration is unnecessary.
 
 ```shell
-algokit init [OPTIONS]
+algokit init [OPTIONS] COMMAND [ARGS]...
 ```
 
 ### Options
@@ -713,6 +759,30 @@ Whether to prefer structuring standalone projects as part of a workspace. An Alg
 
 ### -a, --answer <key> <value>
 Answers key/value pairs to pass to the template.
+
+### example
+
+Initialize a new project from an example template.
+
+Allows you to quickly create a new project by copying one of the official AlgoKit example templates.
+If no example ID is provided, launches an interactive selector to choose from available examples.
+The example will be copied to a new directory in your current location.
+
+```shell
+algokit init example [OPTIONS] [EXAMPLE_ID]
+```
+
+### Options
+
+
+### -l, --list
+List all available examples
+
+### Arguments
+
+
+### EXAMPLE_ID
+Optional argument
 
 ## localnet
 
@@ -971,12 +1041,34 @@ algokit project bootstrap npm [OPTIONS]
 ### --ci, --no-ci
 Run 'npm ci' instead of 'npm install' in CI mode (clean install).
 
+#### pnpm
+
+Runs pnpm install in the current working directory to install Node.js dependencies.
+
+```shell
+algokit project bootstrap pnpm [OPTIONS]
+```
+
+### Options
+
+
+### --ci, --no-ci
+Run 'pnpm install --frozen-lockfile' instead of 'pnpm install' in     CI mode (clean install with frozen lockfile).
+
 #### poetry
 
 Installs Python Poetry (if not present) and runs poetry install in the current working directory to install Python dependencies.
 
 ```shell
 algokit project bootstrap poetry [OPTIONS]
+```
+
+#### uv
+
+Installs UV (if not present) and runs uv sync in the current working directory to install Python dependencies.
+
+```shell
+algokit project bootstrap uv [OPTIONS]
 ```
 
 ### deploy

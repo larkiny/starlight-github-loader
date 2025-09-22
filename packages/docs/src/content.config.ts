@@ -18,22 +18,23 @@ import {
 const REMOTE_CONTENT: ImportOptions[] = [
   {
     name: "AlgoKit CLI Docs",
-    owner: "larkiny",
-    repo: "algokit-cli-docs",
+    owner: "algorandfoundation",
+    repo: "algokit-cli",
+    ref: "chore/content-fix",
     assetsPath: "src/assets/imports/algokit/cli",
     assetsBaseUrl: "@assets/imports/algokit/cli",
     includes: [
       {
-        pattern: "docs/{features/**,algokit.md}",
+        pattern: "docs/features/**/*.md",
         basePath: "src/content/docs/algokit/cli",
-        // rename: {
-        //   "docs/algokit.md": "overview.md",
-        // },
+      },
+      {
+        pattern: "docs/algokit.md",
+        basePath: "src/content/docs/algokit/cli",
         transforms: [
-          createPathBasedFrontmatterTransform("docs/algokit.md", {
+          createFrontmatterTransform({
             frontmatter: {
               title: "AlgoKit CLI Overview",
-              slug: "algokit/cli/algokit",
               sidebar: { label: "Overview", order: 0 },
             },
             mode: "merge",
@@ -49,7 +50,27 @@ const REMOTE_CONTENT: ImportOptions[] = [
     transforms: [convertH1ToTitle],
     linkTransform: {
       stripPrefixes: ["src/content/docs"],
-      pathMappings: createStarlightPathMappings(),
+      pathMappings: [
+        ...createStarlightPathMappings(),
+        // Map ../cli/ to reference/algokit-cli for cross-repository links (after index.md is stripped)
+        {
+          pattern: /^\.\.\/cli\/?$/,
+          replacement: (match: string, anchor: string) => {
+            return `/reference/algokit-cli`;
+          },
+          global: true,
+          description: "Map CLI reference links to reference section",
+        },
+        // Map README links to AlgoKit Introduction
+        {
+          pattern: /^\.\.\/\.\.\/README\.md$/,
+          replacement: (match: string, anchor: string) => {
+            return `/algokit/algokit-intro`;
+          },
+          global: true,
+          description: "Map README links to AlgoKit Introduction",
+        },
+      ],
     },
     enabled: true,
   },

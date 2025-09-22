@@ -11,8 +11,15 @@
       "name": "AlgoKit CLI Docs",
       "repoId": "larkiny/algokit-cli-docs@main",
       "lastCommitSha": "d7fdc1207d443c056d5bf6a616ec01b253ea25e2",
-      "lastImported": "2025-09-22T06:09:47.297Z",
+      "lastImported": "2025-09-22T07:58:45.285Z",
       "ref": "main"
+    },
+    "algorandfoundation/algokit-cli@chore/content-fix": {
+      "name": "AlgoKit CLI Docs",
+      "repoId": "algorandfoundation/algokit-cli@chore/content-fix",
+      "lastCommitSha": "88060b88d47d97d33183b97ba53f9ff15bd305c4",
+      "lastImported": "2025-09-22T09:49:58.627Z",
+      "ref": "chore/content-fix"
     }
   },
   "lastChecked": "2025-09-13T09:13:26.336Z"

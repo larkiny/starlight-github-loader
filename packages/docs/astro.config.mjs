@@ -23,7 +23,12 @@ export default defineConfig({
         {
           label: "Reference",
           badge: { text: "Remote", variant: "danger" },
-          autogenerate: { directory: "reference/algokit/cli" },
+          items: [
+            {
+              label: "AlgoKit CLI Reference",
+              link: "/reference/algokit-cli",
+            },
+          ],
         },
         // {
         //   label: "AlgoKit Utils FIXED",

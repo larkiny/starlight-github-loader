@@ -31,6 +31,25 @@ export function generateId(filePath: string): string {
 
 
 /**
+ * Applies rename logic to get the final filename for a file
+ * @param filePath - Original source file path
+ * @param matchedPattern - The pattern that matched this file
+ * @param options - Import options containing rename mappings
+ * @returns Final filename after applying rename logic
+ * @internal
+ */
+export function applyRename(filePath: string, matchedPattern?: MatchedPattern | null, options?: ImportOptions): string {
+  if (options?.includes && matchedPattern && matchedPattern.index < options.includes.length) {
+    const includePattern = options.includes[matchedPattern.index];
+    if (includePattern.rename && includePattern.rename[filePath]) {
+      return includePattern.rename[filePath];
+    }
+  }
+  // Return original filename if no rename found
+  return basename(filePath);
+}
+
+/**
  * Generates a local file path based on the matched pattern and file path
  * @param filePath - The original file path from the repository
  * @param matchedPattern - The pattern that matched this file (or null if no includes specified)
@@ -59,15 +78,12 @@ export function generatePath(filePath: string, matchedPattern?: MatchedPattern |
       relativePath = basename(filePath);
     }
 
-    // Check for file renaming
-    if (options?.includes && matchedPattern.index < options.includes.length) {
-      const includePattern = options.includes[matchedPattern.index];
-      if (includePattern.rename && includePattern.rename[filePath]) {
-        // Replace the filename in relativePath with the renamed filename
-        const dirPart = dirname(relativePath);
-        const newFilename = includePattern.rename[filePath];
-        relativePath = dirPart === '.' ? newFilename : join(dirPart, newFilename);
-      }
+    // Apply rename logic
+    const finalFilename = applyRename(filePath, matchedPattern, options);
+    if (finalFilename !== basename(filePath)) {
+      // Replace the filename in relativePath with the renamed filename
+      const dirPart = dirname(relativePath);
+      relativePath = dirPart === '.' ? finalFilename : join(dirPart, finalFilename);
     }
 
     return join(matchedPattern.basePath, relativePath);
@@ -689,7 +705,24 @@ export async function toCollectionEntry({
     }
 
     const urlObj = new URL(url);
-    const id = generateId(filePath);
+
+    // Determine if file needs renaming and generate appropriate ID
+    const includeCheck = shouldIncludeFile(filePath, options);
+    const matchedPattern = includeCheck.included ? includeCheck.matchedPattern : null;
+
+    // Check if this file has a rename mapping
+    const hasRename = matchedPattern &&
+      options?.includes &&
+      matchedPattern.index < options.includes.length &&
+      options.includes[matchedPattern.index].rename &&
+      options.includes[matchedPattern.index].rename![filePath];
+
+    // Generate ID based on appropriate path
+    const id = hasRename ?
+      generateId(generatePath(filePath, matchedPattern, options)) : // Use renamed path for ID
+      generateId(filePath); // Use original path for ID
+
+    const finalPath = generatePath(filePath, matchedPattern, options);
     let contents: string;
 
     console.log(`🔄 Fetching file: ${filePath} from ${urlObj.toString()}`);
@@ -786,12 +819,10 @@ export async function toCollectionEntry({
       }
     }
 
-    // Generate target path
-    const relativePath = generatePath(filePath, includeResult.included ? includeResult.matchedPattern : null, options);
-
+    // Use the finalPath we already computed
     return {
       sourcePath: filePath,
-      targetPath: relativePath,
+      targetPath: finalPath,
       content: contents,
       id,
     };
@@ -862,6 +893,11 @@ export async function toCollectionEntry({
       } catch (error: any) {
         logger.error(`Error rendering ${file.id}: ${error.message}`);
       }
+      console.log(`🔍 STORING COLLECTION ENTRY:`, {
+        id: file.id,
+        filePath: file.targetPath,
+        sourcePath: file.sourcePath
+      });
       store.set({
         id: file.id,
         data: parsedData,
