@@ -100,10 +100,31 @@ export function generatePath(filePath: string, matchedPattern?: MatchedPattern |
 
     // Apply path mapping logic
     const finalFilename = applyRename(filePath, matchedPattern, options);
-    if (finalFilename !== basename(filePath)) {
-      // Replace the filename in relativePath with the path-mapped filename
-      const dirPart = dirname(relativePath);
-      relativePath = dirPart === '.' ? finalFilename : join(dirPart, finalFilename);
+    // Always apply path mapping if applyRename returned something different from the original basename
+    // OR if there are pathMappings configured (since empty string mappings might return same basename)
+    const hasPathMappings = options?.includes?.[matchedPattern.index]?.pathMappings &&
+                           Object.keys(options.includes[matchedPattern.index].pathMappings!).length > 0;
+    if (finalFilename !== basename(filePath) || hasPathMappings) {
+      // Check if applyRename returned a full path (contains path separators) or just a filename
+      if (finalFilename.includes('/') || finalFilename.includes('\\')) {
+        // applyRename returned a full relative path - need to extract relative part
+        // Remove the pattern prefix to get the relative path within the pattern context
+        const beforeGlob = pattern.split(/[*?{]/)[0];
+        if (beforeGlob && finalFilename.startsWith(beforeGlob)) {
+          relativePath = finalFilename.substring(beforeGlob.length);
+          // Remove leading slash if present
+          if (relativePath.startsWith('/')) {
+            relativePath = relativePath.substring(1);
+          }
+        } else {
+          relativePath = finalFilename;
+        }
+      } else {
+        // applyRename returned just a filename
+        // If the filename is different due to pathMapping, use it directly
+        // This handles cases where pathMappings flatten directory structures
+        relativePath = finalFilename;
+      }
     }
 
     return join(matchedPattern.basePath, relativePath);

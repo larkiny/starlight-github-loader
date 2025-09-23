@@ -19,8 +19,6 @@ export interface LinkMapping {
   replacement: string | ((match: string, anchor: string, context: any) => string);
   /** Apply to all links, not just unresolved internal links (default: false) */
   global?: boolean;
-  /** Description for debugging (optional) */
-  description?: string;
 }
 
 /**
