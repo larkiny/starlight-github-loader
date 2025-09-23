@@ -1,6 +1,6 @@
 import { slug } from 'github-slugger';
 import path from 'node:path';
-import type { LinkMapping } from './github.types.js';
+import type { LinkMapping, LinkTransformContext, MatchedPattern } from './github.types.js';
 
 /**
  * Represents an imported file with its content and metadata
@@ -14,6 +14,8 @@ export interface ImportedFile {
   content: string;
   /** File ID for cross-referencing */
   id: string;
+  /** Context information for link transformations */
+  linkContext?: LinkTransformContext;
 }
 
 /**
@@ -123,6 +125,42 @@ function applyLinkMappings(
   let transformedPath = linkPath;
 
   for (const mapping of linkMappings) {
+    // Check if contextFilter allows this mapping to be applied
+    if (mapping.contextFilter && context.currentFile.linkContext) {
+      if (!mapping.contextFilter(context.currentFile.linkContext)) {
+        continue; // Skip this mapping
+      }
+    }
+
+    // Handle relative links automatically if enabled
+    if (mapping.relativeLinks && context.currentFile.linkContext) {
+      // Check if this is a relative link (doesn't start with /, http, etc.)
+      if (!linkPath.startsWith('/') && !isExternalLink(linkPath)) {
+        // Check if the link points to a known directory structure
+        const knownPaths = ['modules/', 'classes/', 'interfaces/', 'enums/'];
+        const isKnownPath = knownPaths.some(p => linkPath.startsWith(p));
+
+        if (isKnownPath) {
+          // Strip .md extension from the link path
+          const cleanLinkPath = linkPath.replace(/\.md$/, '');
+
+          // Convert relative path to absolute path using the target base
+          const targetBase = pathToStarlightUrl(context.currentFile.linkContext.basePath, context.global.stripPrefixes);
+
+          // Construct final URL with proper Starlight formatting
+          let finalUrl = targetBase.replace(/\/$/, '') + '/' + cleanLinkPath;
+
+          // Add trailing slash if it doesn't end with one and isn't empty
+          if (finalUrl && !finalUrl.endsWith('/')) {
+            finalUrl += '/';
+          }
+
+          transformedPath = finalUrl;
+          return transformedPath + anchor;
+        }
+      }
+    }
+
     let matched = false;
     let replacement = '';
 

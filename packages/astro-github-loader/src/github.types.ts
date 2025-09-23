@@ -10,6 +10,22 @@ import {Octokit} from "octokit";
 import type { LinkHandler } from "./github.link-transform.js";
 
 /**
+ * Context information for link transformations
+ */
+export interface LinkTransformContext {
+  /** Original source path in the repository */
+  sourcePath: string;
+  /** Target path where the file will be written */
+  targetPath: string;
+  /** Base path for this include pattern */
+  basePath: string;
+  /** Path mappings used for this file */
+  pathMappings?: Record<string, string>;
+  /** The include pattern that matched this file */
+  matchedPattern?: MatchedPattern;
+}
+
+/**
  * Link mapping for transforming URLs in markdown links
  */
 export interface LinkMapping {
@@ -19,6 +35,10 @@ export interface LinkMapping {
   replacement: string | ((match: string, anchor: string, context: any) => string);
   /** Apply to all links, not just unresolved internal links (default: false) */
   global?: boolean;
+  /** Function to determine if this mapping should apply to the current file context */
+  contextFilter?: (context: LinkTransformContext) => boolean;
+  /** Automatically handle relative links by prefixing with target base path (default: false) */
+  relativeLinks?: boolean;
 }
 
 /**

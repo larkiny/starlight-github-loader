@@ -860,12 +860,22 @@ export async function toCollectionEntry({
       }
     }
 
+    // Build link context for this file
+    const linkContext = includeResult.included && includeResult.matchedPattern ? {
+      sourcePath: filePath,
+      targetPath: finalPath,
+      basePath: includeResult.matchedPattern.basePath,
+      pathMappings: options.includes?.[includeResult.matchedPattern.index]?.pathMappings,
+      matchedPattern: includeResult.matchedPattern,
+    } : undefined;
+
     // Use the finalPath we already computed
     return {
       sourcePath: filePath,
       targetPath: finalPath,
       content: contents,
       id,
+      linkContext,
     };
   }
 
