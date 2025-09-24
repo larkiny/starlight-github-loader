@@ -1,6 +1,7 @@
 import { beforeEach, describe, it, expect } from "vitest";
 import { githubLoader } from "./github.loader.js";
 import { globalLinkTransform, type ImportedFile } from "./github.link-transform.js";
+import { createLogger, type ImportSummary } from "./github.logger.js";
 import { Octokit } from "octokit";
 
 const FIXTURES = [
@@ -67,6 +68,39 @@ describe("githubLoader", () => {
 
       // The relative link `modules/` should be transformed to `/reference/algokit-utils-ts/api/modules/`
       expect(result[0].content).toContain('[modules](/reference/algokit-utils-ts/api/modules/)');
+    });
+  });
+
+  describe("logging system", () => {
+    it("should create logger with different levels", () => {
+      const silentLogger = createLogger('silent');
+      const defaultLogger = createLogger('default');
+      const verboseLogger = createLogger('verbose');
+      const debugLogger = createLogger('debug');
+
+      expect(silentLogger.getLevel()).toBe('silent');
+      expect(defaultLogger.getLevel()).toBe('default');
+      expect(verboseLogger.getLevel()).toBe('verbose');
+      expect(debugLogger.getLevel()).toBe('debug');
+    });
+
+    it("should format import summary correctly", () => {
+      const logger = createLogger('default');
+      const summary: ImportSummary = {
+        configName: 'Test Config',
+        repository: 'test/repo',
+        ref: 'main',
+        filesProcessed: 10,
+        filesUpdated: 5,
+        filesUnchanged: 5,
+        assetsDownloaded: 3,
+        assetsCached: 2,
+        duration: 1500,
+        status: 'success'
+      };
+
+      // This test mainly verifies the types work correctly
+      expect(() => logger.logImportSummary(summary)).not.toThrow();
     });
   });
 });

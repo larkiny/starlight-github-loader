@@ -8,6 +8,7 @@ import {Octokit} from "octokit";
 
 // Import link transformation types from the dedicated module
 import type { LinkHandler } from "./github.link-transform.js";
+import type { LogLevel } from "./github.logger.js";
 
 /**
  * Context information for link transformations
@@ -119,12 +120,18 @@ export type GithubLoaderOptions = {
   gitIgnore?: string;
   basePath?: string;
   fetchOptions?: FetchOptions;
-  /** 
+  /**
    * When true, only checks for repository changes without importing.
    * Returns a report of which repositories have new commits.
    * @default false
    */
   dryRun?: boolean;
+  /**
+   * Global logging level for all import operations
+   * Overrides individual ImportOptions logLevel settings
+   * @default 'default'
+   */
+  logLevel?: LogLevel;
 };
 
 /**
@@ -246,6 +253,12 @@ export type ImportOptions = {
    * Applied after all content transforms and across all include patterns
    */
   linkTransform?: ImportLinkTransformOptions;
+  /**
+   * Logging level for this import configuration
+   * Can be overridden by global logLevel in GithubLoaderOptions
+   * @default 'default'
+   */
+  logLevel?: LogLevel;
 };
 
 export type FetchOptions = RequestInit & {

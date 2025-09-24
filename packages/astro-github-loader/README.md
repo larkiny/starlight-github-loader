@@ -67,17 +67,17 @@ export const collections = {
 
 The astro-github-loader processes files through a well-defined pipeline with clear order of operations:
 
+To understand more about the content processing flow, see the [detailed guide](PROCESSING_FLOW.md).
+
 ### Order of Operations
 
-1. **File Discovery**: Scan repository using include patterns
-2. **Pattern Matching**: Determine which include pattern(s) match each file
-3. **Path Mapping**: Apply `pathMappings` to restructure file paths within the repository context
-4. **Local Path Generation**: Combine pattern `basePath` with the (possibly transformed) relative path
-5. **Content Transforms**: Apply transformations in order:
-   - Global transforms (from main config)
-   - Pattern-specific transforms (from matched include pattern)
-6. **Link Transformation**: Process all markdown links across all imported files using `linkMappings`
-7. **Asset Processing**: Download and transform asset references
+1. **File Discovery and Collection**: Scan repository using include patterns and fetch file contents
+2. **Individual File Processing**: For each file:
+   - Apply asset processing (download and transform asset references)
+   - Apply path mappings to determine target paths
+   - Apply content transformations (global transforms, then pattern-specific transforms)
+3. **Global Link Transformation**: Process all markdown links across all imported files using `linkMappings`
+4. **File Storage**: Write processed files to Astro content store
 
 ### Path vs Link Transformations
 

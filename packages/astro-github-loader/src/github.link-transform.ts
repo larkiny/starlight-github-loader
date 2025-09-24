@@ -1,6 +1,7 @@
 import { slug } from 'github-slugger';
 import path from 'node:path';
 import type { LinkMapping, LinkTransformContext, MatchedPattern } from './github.types.js';
+import type { Logger } from './github.logger.js';
 
 /**
  * Represents an imported file with its content and metadata
@@ -32,6 +33,8 @@ interface GlobalLinkContext {
   customHandlers?: LinkHandler[];
   /** Path mappings for common transformations */
   linkMappings?: LinkMapping[];
+  /** Logger for debug output */
+  logger?: Logger;
 }
 
 /**
@@ -98,11 +101,15 @@ function isExternalLink(link: string): boolean {
 /**
  * Normalize path separators and resolve relative paths
  */
-function normalizePath(linkPath: string, currentFilePath: string): string {
+function normalizePath(linkPath: string, currentFilePath: string, logger?: Logger): string {
+  logger?.debug(`[normalizePath] BEFORE: linkPath="${linkPath}", currentFilePath="${currentFilePath}"`);
+
   // Handle relative paths
   if (linkPath.startsWith('./') || linkPath.includes('../')) {
     const currentDir = path.dirname(currentFilePath);
-    return path.posix.normalize(path.posix.join(currentDir, linkPath));
+    const resolved = path.posix.normalize(path.posix.join(currentDir, linkPath));
+    logger?.debug(`[normalizePath] RELATIVE PATH RESOLVED: "${linkPath}" -> "${resolved}" (currentDir: "${currentDir}")`);
+    return resolved;
   }
 
   // Remove leading './'
@@ -110,6 +117,7 @@ function normalizePath(linkPath: string, currentFilePath: string): string {
     return linkPath.slice(2);
   }
 
+  logger?.debug(`[normalizePath] AFTER: "${linkPath}" (no changes)`);
   return linkPath;
 }
 
@@ -265,7 +273,7 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
   const { path: linkPath, anchor } = extractAnchor(processedUrl);
 
   // Normalize the link path relative to current file
-  const normalizedPath = normalizePath(linkPath, context.currentFile.sourcePath);
+  const normalizedPath = normalizePath(linkPath, context.currentFile.sourcePath, context.global.logger);
 
   // Check if this links to an imported file
   const targetPath = context.global.sourceToTargetMap.get(normalizedPath);
@@ -311,6 +319,7 @@ export function globalLinkTransform(
     stripPrefixes: string[];
     customHandlers?: LinkHandler[];
     linkMappings?: LinkMapping[];
+    logger?: Logger;
   }
 ): ImportedFile[] {
   // Build global context
@@ -328,6 +337,7 @@ export function globalLinkTransform(
     stripPrefixes: options.stripPrefixes,
     customHandlers: options.customHandlers,
     linkMappings: options.linkMappings,
+    logger: options.logger,
   };
 
   // Transform links in all files

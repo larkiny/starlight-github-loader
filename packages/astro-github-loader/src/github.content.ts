@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import path, { join, dirname, basename, extname } from "node:path";
 import picomatch from "picomatch";
 import { globalLinkTransform, type ImportedFile } from "./github.link-transform.js";
+import type { Logger } from "./github.logger.js";
 
 import {
   INVALID_SERVICE_RESPONSE,
@@ -11,6 +12,14 @@ import {
 } from "./github.constants.js";
 
 import type { LoaderContext, CollectionEntryOptions, ImportOptions, RenderedContent, MatchedPattern } from "./github.types.js";
+
+export interface ImportStats {
+  processed: number;
+  updated: number;
+  unchanged: number;
+  assetsDownloaded?: number;
+  assetsCached?: number;
+}
 
 /**
  * Generates a unique identifier from a file path by removing the extension
@@ -258,7 +267,6 @@ export async function downloadAsset(
   localPath: string,
   signal?: AbortSignal
 ): Promise<void> {
-  console.log(`      📡 GitHub API call: repos.getContent(${owner}/${repo}:${assetPath}@${ref})`);
   try {
     const { data } = await octokit.rest.repos.getContent({
       owner,
@@ -268,36 +276,26 @@ export async function downloadAsset(
       request: { signal },
     });
 
-    console.log(`      📋 GitHub API response: type=${data.type}, isArray=${Array.isArray(data)}`);
-
     if (Array.isArray(data) || data.type !== 'file' || !data.download_url) {
       throw new Error(`Asset ${assetPath} is not a valid file (type: ${data.type}, downloadUrl: ${data.download_url})`);
     }
 
-    console.log(`      🌐 Fetching from download URL: ${data.download_url}`);
     const response = await fetch(data.download_url, { signal });
     if (!response.ok) {
       throw new Error(`Failed to download asset: ${response.status} ${response.statusText}`);
     }
 
-    console.log(`      📦 Converting to buffer (size: ${response.headers.get('content-length')} bytes)`);
     const buffer = await response.arrayBuffer();
     const dir = dirname(localPath);
 
-    console.log(`      📁 Ensuring directory exists: ${dir}`);
     if (!existsSync(dir)) {
       await fs.mkdir(dir, { recursive: true });
-      console.log(`      ✨ Created directory: ${dir}`);
     }
 
-    console.log(`      💿 Writing file: ${localPath}`);
     await fs.writeFile(localPath, new Uint8Array(buffer));
-    console.log(`      🎉 Asset download complete!`);
   } catch (error: any) {
-    console.log(`      🚫 Download error: ${error.message} (status: ${error.status})`);
     if (error.status === 404) {
-      console.warn(`Asset not found: ${assetPath}`);
-      return;
+      throw new Error(`Asset not found: ${assetPath}`);
     }
     throw error;
   }
@@ -348,36 +346,42 @@ async function processAssets(
   filePath: string,
   options: ImportOptions,
   octokit: any,
+  logger: Logger,
   signal?: AbortSignal
-): Promise<string> {
+): Promise<{ content: string; assetsDownloaded: number; assetsCached: number }> {
   const { owner, repo, ref = 'main', assetsPath, assetsBaseUrl, assetPatterns } = options;
 
-  console.log(`🖼️  Processing assets for ${filePath}`);
-  console.log(`    assetsPath: ${assetsPath}`);
-  console.log(`    assetsBaseUrl: ${assetsBaseUrl}`);
+  logger.verbose(`🖼️  Processing assets for ${filePath}`);
+  logger.debug(`    assetsPath: ${assetsPath}`);
+  logger.debug(`    assetsBaseUrl: ${assetsBaseUrl}`);
 
   if (!assetsPath || !assetsBaseUrl) {
-    console.log(`    ⏭️  Skipping asset processing - missing assetsPath or assetsBaseUrl`);
-    return content;
+    logger.verbose(`    ⏭️  Skipping asset processing - missing assetsPath or assetsBaseUrl`);
+    return { content, assetsDownloaded: 0, assetsCached: 0 };
   }
 
   // Detect assets in the content
   const detectedAssets = detectAssets(content, assetPatterns);
-  console.log(`    📸 Detected ${detectedAssets.length} assets:`, detectedAssets);
+  logger.verbose(`    📸 Detected ${detectedAssets.length} assets`);
+  if (detectedAssets.length > 0) {
+    logger.debug(`    Assets: ${detectedAssets.join(', ')}`);
+  }
 
   if (detectedAssets.length === 0) {
-    return content;
+    return { content, assetsDownloaded: 0, assetsCached: 0 };
   }
 
   const assetMap = new Map<string, string>();
+  let assetsDownloaded = 0;
+  let assetsCached = 0;
 
   // Process each detected asset
   await Promise.all(detectedAssets.map(async (assetPath) => {
-    console.log(`    📥 Processing asset: ${assetPath}`);
+    logger.logAssetProcessing("Processing", assetPath);
     try {
       // Resolve the asset path relative to the current markdown file
       const resolvedAssetPath = resolveAssetPath(filePath, assetPath);
-      console.log(`    🔗 Resolved path: ${resolvedAssetPath}`);
+      logger.debug(`    🔗 Resolved path: ${resolvedAssetPath}`);
 
       // Generate unique filename to avoid conflicts
       const originalFilename = basename(assetPath);
@@ -385,27 +389,36 @@ async function processAssets(
       const nameWithoutExt = basename(originalFilename, ext);
       const uniqueFilename = `${nameWithoutExt}-${Date.now()}${ext}`;
       const localPath = join(assetsPath, uniqueFilename);
-      console.log(`    💾 Local path: ${localPath}`);
+      logger.debug(`    💾 Local path: ${localPath}`);
 
-      // Download the asset
-      console.log(`    ⬇️  Downloading asset from ${owner}/${repo}@${ref}:${resolvedAssetPath}`);
-      await downloadAsset(octokit, owner, repo, ref, resolvedAssetPath, localPath, signal);
-      console.log(`    ✅ Downloaded successfully`);
+      // Check if asset already exists (simple cache check)
+      if (existsSync(localPath)) {
+        logger.logAssetProcessing("Cached", assetPath);
+        assetsCached++;
+      } else {
+        // Download the asset
+        logger.logAssetProcessing("Downloading", assetPath, `from ${owner}/${repo}@${ref}:${resolvedAssetPath}`);
+        await downloadAsset(octokit, owner, repo, ref, resolvedAssetPath, localPath, signal);
+        logger.logAssetProcessing("Downloaded", assetPath);
+        assetsDownloaded++;
+      }
 
       // Generate URL for the transformed reference
       const assetUrl = `${assetsBaseUrl}/${uniqueFilename}`.replace(/\/+/g, '/');
-      console.log(`    🔄 Transform: ${assetPath} -> ${assetUrl}`);
+      logger.debug(`    🔄 Transform: ${assetPath} -> ${assetUrl}`);
 
       // Map the transformation
       assetMap.set(assetPath, assetUrl);
     } catch (error) {
-      console.warn(`    ❌ Failed to process asset ${assetPath}:`, error);
+      logger.warn(`    ❌ Failed to process asset ${assetPath}: ${error}`);
     }
   }));
 
-  console.log(`    🗺️  Asset map size: ${assetMap.size}`);
+  logger.verbose(`    🗺️  Processed ${assetMap.size} assets: ${assetsDownloaded} downloaded, ${assetsCached} cached`);
+
   // Transform the content with new asset references
-  return transformAssetReferences(content, assetMap);
+  const transformedContent = transformAssetReferences(content, assetMap);
+  return { content: transformedContent, assetsDownloaded, assetsCached };
 }
 
 /**
@@ -500,11 +513,22 @@ export async function syncEntry(
   // Process assets FIRST if configuration is provided - before content transforms
   // This ensures asset detection works with original markdown links before they get transformed
   if (options.assetsPath && options.assetsBaseUrl) {
-    await processAssets(contents, filePath, options, octokit, init.signal || undefined).then(transformedContent => {
-      contents = transformedContent;
-    }).catch(error => {
+    try {
+      // Create a dummy logger for syncEntry since it uses Astro's logger
+      const dummyLogger = {
+        verbose: (msg: string) => logger.info(msg),
+        debug: (msg: string) => logger.debug(msg),
+        warn: (msg: string) => logger.warn(msg),
+        logAssetProcessing: (action: string, path: string, details?: string) => {
+          const msg = details ? `Asset ${action}: ${path} - ${details}` : `Asset ${action}: ${path}`;
+          logger.info(msg);
+        }
+      };
+      const assetResult = await processAssets(contents, filePath, options, octokit, dummyLogger as Logger, init.signal || undefined);
+      contents = assetResult.content;
+    } catch (error: any) {
       logger.warn(`Asset processing failed for ${id}: ${error.message}`);
-    });
+    }
   }
 
   // Apply content transforms if provided - both global and pattern-specific
@@ -563,7 +587,7 @@ export async function syncEntry(
   }
   // Write file to path
   if (!existsSync(fileURLToPath(fileUrl))) {
-    logger.info(`Writing ${id} to ${fileUrl}`);
+    (logger as any).verbose(`Writing ${id} to ${fileUrl}`);
     await syncFile(fileURLToPath(fileUrl), contents);
   }
 
@@ -574,7 +598,7 @@ export async function syncEntry(
   });
 
   if (entryType.getRenderFunction) {
-    logger.info(`Rendering ${id}`);
+    (logger as any).verbose(`Rendering ${id}`);
     const render = await entryType.getRenderFunction(config);
     let rendered: RenderedContent | undefined = undefined;
     try {
@@ -627,10 +651,13 @@ export async function toCollectionEntry({
   octokit,
   options,
   signal,
-}: CollectionEntryOptions) {
+}: CollectionEntryOptions): Promise<ImportStats> {
   const { owner, repo, ref = "main" } = options || {};
   if (typeof repo !== "string" || typeof owner !== "string")
     throw new TypeError(INVALID_STRING_ERROR);
+
+  // Get logger from context - it should be our Logger instance (initialize early)
+  const logger = context.logger as unknown as Logger;
 
   // Get all unique directory prefixes from include patterns to limit scanning
   const directoriesToScan = new Set<string>();
@@ -655,25 +682,40 @@ export async function toCollectionEntry({
     allFiles.push(...files);
   }
 
+  // Track statistics
+  const stats: ImportStats = {
+    processed: 0,
+    updated: 0,
+    unchanged: 0,
+    assetsDownloaded: 0,
+    assetsCached: 0,
+  };
+
   // Apply link transformation if configured
   let processedFiles = allFiles;
   if (options.linkTransform) {
-    context.logger?.info(`Applying link transformation to ${allFiles.length} files`);
+    logger.verbose(`Applying link transformation to ${allFiles.length} files`);
     processedFiles = globalLinkTransform(allFiles, {
       stripPrefixes: options.linkTransform.stripPrefixes,
       customHandlers: options.linkTransform.customHandlers,
       linkMappings: options.linkTransform.linkMappings,
+      logger,
     });
   }
 
   // Now store all processed files
-  const results = [];
+  stats.processed = processedFiles.length;
   for (const file of processedFiles) {
+    logger.logFileProcessing("Storing", file.sourcePath);
     const result = await storeProcessedFile(file, context, options);
-    results.push(result);
+    if (result) {
+      stats.updated++;
+    } else {
+      stats.unchanged++;
+    }
   }
 
-  return results;
+  return stats;
 
   // Helper function to collect files without storing them
   async function collectFilesRecursively(path: string): Promise<ImportedFile[]> {
@@ -766,7 +808,7 @@ export async function toCollectionEntry({
     const finalPath = generatePath(filePath, matchedPattern, options);
     let contents: string;
 
-    console.log(`🔄 Fetching file: ${filePath} from ${urlObj.toString()}`);
+    logger.logFileProcessing("Fetching", filePath, `from ${urlObj.toString()}`);
 
     // Download file content
     const init = { signal, headers: getHeaders({ init: {}, meta: context.meta, id }) };
@@ -794,12 +836,12 @@ export async function toCollectionEntry({
       const fileUrl = pathToFileURL(relativePath);
 
       if (existsSync(fileURLToPath(fileUrl))) {
-        console.log(`⏭️  Using cached content for ${filePath} (304)`);
+        logger.logFileProcessing("Using cached", filePath, "304 not modified");
         const { promises: fs } = await import('node:fs');
         contents = await fs.readFile(fileURLToPath(fileUrl), 'utf-8');
       } else {
         // File is missing locally, re-fetch without cache headers
-        console.log(`🔄 File ${filePath} missing locally, re-fetching despite 304`);
+        logger.logFileProcessing("Re-fetching", filePath, "missing locally despite 304");
         const freshInit = { ...init };
         freshInit.headers = new Headers(init.headers);
         freshInit.headers.delete('If-None-Match');
@@ -818,11 +860,16 @@ export async function toCollectionEntry({
     }
 
     // Process assets FIRST if configuration is provided
+    let fileAssetsDownloaded = 0;
+    let fileAssetsCached = 0;
     if (options.assetsPath && options.assetsBaseUrl) {
       try {
-        contents = await processAssets(contents, filePath, options, octokit, signal);
+        const assetResult = await processAssets(contents, filePath, options, octokit, logger, signal);
+        contents = assetResult.content;
+        fileAssetsDownloaded = assetResult.assetsDownloaded;
+        fileAssetsCached = assetResult.assetsCached;
       } catch (error) {
-        context.logger?.warn(`Asset processing failed for ${id}: ${error instanceof Error ? error.message : String(error)}`);
+        logger.warn(`Asset processing failed for ${id}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
@@ -918,7 +965,7 @@ export async function toCollectionEntry({
 
     // Write file to disk
     if (!existsSync(fileURLToPath(fileUrl))) {
-      logger.info(`Writing ${file.id} to ${fileUrl}`);
+      logger.verbose(`Writing ${file.id} to ${fileUrl}`);
       await syncFile(fileURLToPath(fileUrl), file.content);
     }
 
@@ -930,7 +977,7 @@ export async function toCollectionEntry({
 
     // Store in content store
     if (entryType.getRenderFunction) {
-      logger.info(`Rendering ${file.id}`);
+      logger.verbose(`Rendering ${file.id}`);
       const render = await entryType.getRenderFunction(config);
       let rendered = undefined;
       try {
@@ -944,11 +991,7 @@ export async function toCollectionEntry({
       } catch (error: any) {
         logger.error(`Error rendering ${file.id}: ${error.message}`);
       }
-      console.log(`🔍 STORING COLLECTION ENTRY:`, {
-        id: file.id,
-        filePath: file.targetPath,
-        sourcePath: file.sourcePath
-      });
+      logger.debug(`🔍 Storing collection entry: ${file.id} (${file.sourcePath} -> ${file.targetPath})`);
       store.set({
         id: file.id,
         data: parsedData,
