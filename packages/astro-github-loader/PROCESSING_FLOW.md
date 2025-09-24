@@ -114,7 +114,7 @@ createConditionalTransform(
 
 This is the most complex phase, involving several sub-steps for each link in each file.
 
-#### Sub-step 7a: Build Source-to-Target Map
+#### Step 7.1: Build Source-to-Target Map
 Creates a lookup table mapping original GitHub paths to final target paths:
 
 ```javascript
@@ -125,11 +125,11 @@ sourceToTargetMap = new Map([
 ]);
 ```
 
-#### Sub-step 7b: Process Each Link in Each File
+#### Step 7.2: Process Each Link in Each File
 
 **For each markdown link `[text](url)` in each file, the following steps occur:**
 
-##### Sub-step 7b-i: Apply Global Mappings
+##### Step 7.2.1: Apply Global Mappings
 - **Configuration**: Mappings with `global: true`
 - **Purpose**: Apply transformations that should affect all links globally
 
@@ -153,7 +153,7 @@ sourceToTargetMap = new Map([
 // After: "../abi/"
 ```
 
-##### Sub-step 7b-ii: Path Normalization
+##### Step 7.2.2: Path Normalization
 - **Function**: `normalizePath()`
 - **Process**: Resolve relative paths (`../`, `./`) to full source paths
 
@@ -171,7 +171,7 @@ normalized = path.posix.normalize(path.posix.join(currentDir, "../abi/"))
 result = "docs/markdown/autoapi/algokit_utils/applications/abi/"
 ```
 
-##### Sub-step 7b-iii: Internal Link Resolution
+##### Step 7.2.3: Internal Link Resolution
 - **Process**: Check if normalized path exists in `sourceToTargetMap`
 - **If found**: Convert to Starlight URL using `pathToStarlightUrl()`
 - **If not found**: Fall through to non-global mappings
@@ -189,7 +189,7 @@ sourceToTargetMap.get("docs/markdown/autoapi/algokit_utils/applications/abi/")
 → Falls through to non-global mappings
 ```
 
-##### Sub-step 7b-iv: Non-Global Mappings (Fallback)
+##### Step 7.2.4: Non-Global Mappings (Fallback)
 - **Configuration**: Mappings with `global: false` (including context-aware rules)
 - **Purpose**: Handle unresolved links with context-specific transformations
 
