@@ -74,6 +74,41 @@ const REMOTE_CONTENT: ImportOptions[] = [
     },
     enabled: true,
   },
+  {
+    name: "AlgoKit Utils Python Docs",
+    owner: "algorandfoundation",
+    repo: "algokit-utils-py",
+    ref: "chore/reference-docs",
+    includes: [
+      {
+        pattern: "docs/markdown/autoapi/algokit_utils/**/*.md",
+        basePath: "src/content/docs/reference/algokit-utils-py/api",
+        pathMappings: {
+          "docs/markdown/autoapi/algokit_utils/": "",
+        },
+      },
+    ],
+    transforms: [convertH1ToTitle],
+    linkTransform: {
+      stripPrefixes: ["src/content/docs"],
+      linkMappings: [
+        ...createStarlightLinkMappings(),
+        {
+          contextFilter: (context) =>
+            context.sourcePath.startsWith("docs/markdown/autoapi/algokit_utils/"),
+          relativeLinks: true,
+          pattern: /.*/,
+          replacement: (match: string, anchor: string, context: any) => {
+            const relativePath = match.replace(/\.md$/, "");
+            const finalPath = `/reference/algokit-utils-py/api/${relativePath}`;
+            return finalPath.replace(/\/index$/, "/");
+          },
+          global: false,
+        },
+      ],
+    },
+    enabled: true,
+  },
 ];
 
 const IMPORT_REMOTE = process.env.IMPORT_GITHUB === "true";

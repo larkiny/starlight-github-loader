@@ -260,20 +260,22 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
     return `[${linkText}](${linkUrl})`;
   }
 
-  let processedUrl = linkUrl;
+  const { path: linkPath, anchor } = extractAnchor(linkUrl);
 
-  // Apply global path mappings (only to non-external links)
+  // Normalize the link path relative to current file FIRST
+  const normalizedPath = normalizePath(linkPath, context.currentFile.sourcePath, context.global.logger);
+
+  // Apply global path mappings to the normalized path
+  let processedNormalizedPath = normalizedPath;
   if (context.global.linkMappings) {
     const globalMappings = context.global.linkMappings.filter(m => m.global);
     if (globalMappings.length > 0) {
-      processedUrl = applyLinkMappings(processedUrl, globalMappings, context);
+      processedNormalizedPath = applyLinkMappings(normalizedPath + anchor, globalMappings, context);
+      // Extract path again after global mappings
+      const { path: newPath } = extractAnchor(processedNormalizedPath);
+      processedNormalizedPath = newPath;
     }
   }
-
-  const { path: linkPath, anchor } = extractAnchor(processedUrl);
-
-  // Normalize the link path relative to current file
-  const normalizedPath = normalizePath(linkPath, context.currentFile.sourcePath, context.global.logger);
 
   // Check if this links to an imported file
   const targetPath = context.global.sourceToTargetMap.get(normalizedPath);
@@ -288,8 +290,8 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
   if (context.global.linkMappings) {
     const nonGlobalMappings = context.global.linkMappings.filter(m => !m.global);
     if (nonGlobalMappings.length > 0) {
-      const mappedUrl = applyLinkMappings(processedUrl, nonGlobalMappings, context);
-      if (mappedUrl !== processedUrl) {
+      const mappedUrl = applyLinkMappings(processedNormalizedPath + anchor, nonGlobalMappings, context);
+      if (mappedUrl !== (processedNormalizedPath + anchor)) {
         return `[${linkText}](${mappedUrl})`;
       }
     }
@@ -298,15 +300,16 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
   // Check custom handlers
   if (context.global.customHandlers) {
     for (const handler of context.global.customHandlers) {
-      if (handler.test(processedUrl, context)) {
-        const transformedUrl = handler.transform(processedUrl, context);
+      const currentUrl = processedNormalizedPath + anchor;
+      if (handler.test(currentUrl, context)) {
+        const transformedUrl = handler.transform(currentUrl, context);
         return `[${linkText}](${transformedUrl})`;
       }
     }
   }
 
   // No transformation needed - return processed URL
-  return `[${linkText}](${processedUrl})`;
+  return `[${linkText}](${processedNormalizedPath + anchor})`;
 }
 
 /**
