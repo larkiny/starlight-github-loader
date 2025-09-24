@@ -129,8 +129,8 @@ sourceToTargetMap = new Map([
 
 **For each markdown link `[text](url)` in each file, the following steps occur:**
 
-##### Step 7.2.1: Apply Global Mappings
-- **Configuration**: Mappings with `global: true`
+##### Step 7.2.1: Apply Global Link Mappings
+- **Configuration**: Link mappings with `global: true`
 - **Purpose**: Apply transformations that should affect all links globally
 
 **Examples**:
@@ -162,7 +162,7 @@ sourceToTargetMap = new Map([
 // Current file being processed
 currentFile: "docs/markdown/autoapi/algokit_utils/applications/app_factory/SendAppCreateFactoryTransactionResult.md"
 
-// Link after global mappings
+// Link after global link mappings
 linkUrl: "../abi/"
 
 // Normalization process
@@ -174,7 +174,7 @@ result = "docs/markdown/autoapi/algokit_utils/applications/abi/"
 ##### Step 7.2.3: Internal Link Resolution
 - **Process**: Check if normalized path exists in `sourceToTargetMap`
 - **If found**: Convert to Starlight URL using `pathToStarlightUrl()`
-- **If not found**: Fall through to non-global mappings
+- **If not found**: Fall through to non-global link mappings
 
 **Examples**:
 ```typescript
@@ -186,11 +186,11 @@ sourceToTargetMap.get("docs/markdown/autoapi/algokit_utils/applications/abi/inde
 // Failure case (our current bug)
 sourceToTargetMap.get("docs/markdown/autoapi/algokit_utils/applications/abi/")
 → Not found (because map has "...abi/index.md", not "...abi/")
-→ Falls through to non-global mappings
+→ Falls through to non-global link mappings
 ```
 
-##### Step 7.2.4: Non-Global Mappings (Fallback)
-- **Configuration**: Mappings with `global: false` (including context-aware rules)
+##### Step 7.2.4: Non-Global Link Mappings (Fallback)
+- **Configuration**: Link mappings with `global: false` (including context-aware rules)
 - **Purpose**: Handle unresolved links with context-specific transformations
 
 **Examples**:
@@ -240,14 +240,14 @@ includes: [
 linkTransform: {
   stripPrefixes: ['src/content/docs'],  // Prefixes to remove from final URLs
   linkMappings: [
-    // Global mappings (applied first)
+    // Global link mappings (applied first)
     {
       pattern: /\/index\.md$/,
       replacement: '/',
       global: true
     },
 
-    // Context-aware mappings (applied to unresolved links)
+    // Context-aware link mappings (applied to unresolved links)
     {
       contextFilter: context => context.sourcePath.startsWith('docs/api/'),
       relativeLinks: true,
@@ -269,7 +269,7 @@ linkTransform: {
 1. Enable debug logging: `logLevel: 'debug'`
 2. Check `[normalizePath]` debug messages to see path resolution
 3. Verify your `sourceToTargetMap` includes the expected paths
-4. Check if global mappings are interfering with path resolution
+4. Check if global link mappings are interfering with path resolution
 
 **Example Debug Output**:
 ```
