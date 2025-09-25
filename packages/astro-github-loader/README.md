@@ -84,6 +84,7 @@ To understand more about the content processing flow, see the [detailed guide](P
 Understanding when and why to use each type of transformation:
 
 - **`pathMappings`**: Controls where files are imported to (changes file system paths)
+
   - Applied during import process
   - Affects the final location of files on disk
   - **Use when**: You need to restructure the imported files differently than they exist in the source repository
@@ -112,9 +113,9 @@ const REMOTE_CONTENT: ImportOptions[] = [
         basePath: "src/content/docs/guides",
         pathMappings: {
           // Move files from capabilities subfolder up one level
-          'docs/capabilities/': 'docs/',
+          "docs/capabilities/": "docs/",
           // Rename specific files
-          'docs/README.md': 'docs/overview.md',
+          "docs/README.md": "docs/overview.md",
         },
         transforms: [addGuideMetadata],
       },
@@ -124,7 +125,7 @@ const REMOTE_CONTENT: ImportOptions[] = [
         basePath: "src/content/docs/api",
         pathMappings: {
           // Flatten API structure
-          'api-reference/v1/': 'api-reference/',
+          "api-reference/v1/": "api-reference/",
         },
         transforms: [addApiMetadata, formatApiDocs],
       },
@@ -152,6 +153,7 @@ const REMOTE_CONTENT: ImportOptions[] = [
 Use `pathMappings` to restructure files during import.
 
 **Common use cases**:
+
 - Flatten nested folder structures (e.g., move `docs/capabilities/` files to `docs/`)
 - Rename specific files (e.g., `README.md` → `overview.md`)
 - Reorganize content for better site structure
@@ -174,6 +176,7 @@ Use `pathMappings` to restructure files during import.
 ```
 
 **Important**: Folder mappings require trailing slashes to distinguish from file mappings:
+
 - ✅ `'docs/capabilities/': 'docs/'` (folder mapping - moves all files)
 - ❌ `'docs/capabilities': 'docs/'` (treated as exact file match)
 
@@ -195,6 +198,7 @@ The loader supports both content transformations (modifying file contents) and l
 Apply content transformations globally or per-pattern.
 
 **Use content transforms when you need to**:
+
 - Add frontmatter (metadata) to imported files
 - Convert H1 headings to frontmatter titles
 - Add import tracking information
@@ -231,7 +235,7 @@ const convertH1ToTitle: TransformFunction = (content, context) => {
   if (h1Match) {
     const title = h1Match[1];
     // Remove the H1 from content
-    content = content.replace(/^#\s+.+$/m, '').trim();
+    content = content.replace(/^#\s+.+$/m, "").trim();
     // Add to frontmatter
     const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
     if (frontmatterMatch) {
@@ -244,12 +248,14 @@ const convertH1ToTitle: TransformFunction = (content, context) => {
   }
   return content;
 };
+```
 
 ### Link Transformations
 
 Configure link transformations to handle cross-repository links and restructured file references.
 
 **Use link mappings when**:
+
 - You've restructured files with `pathMappings` and need to update internal links
 - Links reference files outside the imported document set (external repositories, different sections)
 - Links need to be transformed for your site's URL structure (e.g., Starlight routing)
@@ -272,8 +278,8 @@ const REMOTE_CONTENT: ImportOptions[] = [
         pattern: "docs/**/*.md",
         basePath: "src/content/docs/guides",
         pathMappings: {
-          'docs/capabilities/': 'docs/',
-          'docs/README.md': 'docs/overview.md',
+          "docs/capabilities/": "docs/",
+          "docs/README.md": "docs/overview.md",
         },
         // Pattern-specific content transforms
         transforms: [addGuideFormatting],
@@ -287,7 +293,7 @@ const REMOTE_CONTENT: ImportOptions[] = [
 
     // Link transformations (applied after content transforms)
     linkTransform: {
-      stripPrefixes: ['src/content/docs'],
+      stripPrefixes: ["src/content/docs"],
       linkMappings: [
         // Apply Starlight-specific link transformations
         ...createStarlightLinkMappings(),
@@ -299,7 +305,7 @@ const REMOTE_CONTENT: ImportOptions[] = [
             return `/reference/algokit-cli`;
           },
           global: true,
-          description: 'Map CLI reference links to reference section',
+          description: "Map CLI reference links to reference section",
         },
 
         // Transform README links to introduction
@@ -309,7 +315,7 @@ const REMOTE_CONTENT: ImportOptions[] = [
             return `/introduction`;
           },
           global: true,
-          description: 'Map README links to introduction page',
+          description: "Map README links to introduction page",
         },
       ],
     },
@@ -488,7 +494,9 @@ interface LinkMapping {
   pattern: string | RegExp;
 
   /** Replacement string or function */
-  replacement: string | ((match: string, anchor: string, context: any) => string);
+  replacement:
+    | string
+    | ((match: string, anchor: string, context: any) => string);
 
   /** Apply to all links, not just unresolved internal links (default: false) */
   global?: boolean;
