@@ -1,6 +1,6 @@
 import { slug } from 'github-slugger';
 import path from 'node:path';
-import type { LinkMapping, LinkTransformContext, MatchedPattern } from './github.types.js';
+import type { LinkMapping, LinkTransformContext, MatchedPattern, IncludePattern, PathMappingValue, EnhancedPathMapping } from './github.types.js';
 import type { Logger } from './github.logger.js';
 
 /**
@@ -153,7 +153,7 @@ function applyLinkMappings(
           const cleanLinkPath = linkPath.replace(/\.md$/, '');
 
           // Convert relative path to absolute path using the target base
-          const targetBase = pathToStarlightUrl(context.currentFile.linkContext.basePath, context.global.stripPrefixes);
+          const targetBase = generateSiteUrl(context.currentFile.linkContext.basePath, context.global.stripPrefixes);
 
           // Construct final URL with proper Starlight formatting
           let finalUrl = targetBase.replace(/\/$/, '') + '/' + cleanLinkPath;
@@ -206,9 +206,9 @@ function applyLinkMappings(
 }
 
 /**
- * Convert a target path to a Starlight-compatible URL
+ * Convert a target path to a site-compatible URL
  */
-function pathToStarlightUrl(targetPath: string, stripPrefixes: string[]): string {
+function generateSiteUrl(targetPath: string, stripPrefixes: string[]): string {
   let url = targetPath;
 
   // Strip configured prefixes
@@ -290,8 +290,8 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
 
   if (targetPath) {
     // This is an internal link to an imported file
-    const starlightUrl = pathToStarlightUrl(targetPath, context.global.stripPrefixes);
-    return `[${linkText}](${starlightUrl}${anchor})`;
+    const siteUrl = generateSiteUrl(targetPath, context.global.stripPrefixes);
+    return `[${linkText}](${siteUrl}${anchor})`;
   }
 
   // Apply non-global path mappings to unresolved links
@@ -369,6 +369,82 @@ export function globalLinkTransform(
   }));
 }
 
+
+/**
+ * Infer cross-section path from basePath
+ * @param basePath - The base path from include pattern (e.g., 'src/content/docs/reference/api')
+ * @returns Inferred cross-section path (e.g., '/reference/api')
+ */
+function inferCrossSectionPath(basePath: string): string {
+  return basePath
+    .replace(/^src\/content\/docs/, '')
+    .replace(/\/$/, '') || '/';
+}
+
+/**
+ * Generate link mappings automatically from pathMappings in include patterns
+ * @param includes - Array of include patterns with pathMappings
+ * @param stripPrefixes - Prefixes to strip when generating URLs
+ * @returns Array of generated link mappings
+ */
+export function generateAutoLinkMappings(
+  includes: IncludePattern[],
+  stripPrefixes: string[] = []
+): LinkMapping[] {
+  const linkMappings: LinkMapping[] = [];
+
+  for (const includePattern of includes) {
+    if (!includePattern.pathMappings) continue;
+
+    const inferredCrossSection = inferCrossSectionPath(includePattern.basePath);
+
+    for (const [sourcePath, mappingValue] of Object.entries(includePattern.pathMappings)) {
+      // Handle both string and enhanced object formats
+      const targetPath = typeof mappingValue === 'string' ? mappingValue : mappingValue.target;
+      const crossSectionPath = typeof mappingValue === 'object' && mappingValue.crossSectionPath
+        ? mappingValue.crossSectionPath
+        : inferredCrossSection;
+
+      if (sourcePath.endsWith('/')) {
+        // Folder mapping - use regex with capture group
+        const sourcePattern = sourcePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        linkMappings.push({
+          pattern: new RegExp(`^${sourcePattern}(.+)$`),
+          replacement: (transformedPath: string, anchor: string, context: any) => {
+            const relativePath = transformedPath.replace(new RegExp(`^${sourcePattern}`), '');
+            let finalPath: string;
+            if (crossSectionPath && crossSectionPath !== '/') {
+              finalPath = targetPath === ''
+                ? `${crossSectionPath}/${relativePath}`
+                : `${crossSectionPath}/${targetPath}${relativePath}`;
+            } else {
+              finalPath = targetPath === '' ? relativePath : `${targetPath}${relativePath}`;
+            }
+            return generateSiteUrl(finalPath, stripPrefixes);
+          },
+          global: true,
+        });
+      } else {
+        // File mapping - exact string match
+        const sourcePattern = sourcePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        linkMappings.push({
+          pattern: new RegExp(`^${sourcePattern}$`),
+          replacement: (transformedPath: string, anchor: string, context: any) => {
+            const finalPath = crossSectionPath && crossSectionPath !== '/'
+              ? `${crossSectionPath}/${targetPath}`
+              : targetPath;
+            return generateSiteUrl(finalPath, stripPrefixes);
+          },
+          global: true,
+        });
+      }
+    }
+  }
+
+  return linkMappings;
+}
 
 /**
  * Export types for use in configuration

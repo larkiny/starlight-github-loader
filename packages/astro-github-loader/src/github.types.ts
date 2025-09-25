@@ -21,7 +21,7 @@ export interface LinkTransformContext {
   /** Base path for this include pattern */
   basePath: string;
   /** Path mappings used for this file */
-  pathMappings?: Record<string, string>;
+  pathMappings?: Record<string, PathMappingValue>;
   /** The include pattern that matched this file */
   matchedPattern?: MatchedPattern;
 }
@@ -89,6 +89,25 @@ export interface TransformContext {
 export type TransformFunction = (content: string, context: TransformContext) => string;
 
 /**
+ * Enhanced path mapping configuration that supports cross-section linking
+ */
+export interface EnhancedPathMapping {
+  /** Target path where the file should be imported */
+  target: string;
+  /**
+   * Cross-section path for generating links to this content from other sections.
+   * If not specified, will be inferred from the basePath.
+   * Example: '/reference/algokit-utils-ts/api'
+   */
+  crossSectionPath?: string;
+}
+
+/**
+ * Path mapping value - can be a simple string or an enhanced configuration object
+ */
+export type PathMappingValue = string | EnhancedPathMapping;
+
+/**
  * Configuration for a single include pattern
  */
 export interface IncludePattern {
@@ -101,15 +120,23 @@ export interface IncludePattern {
   /**
    * Map of source paths to target paths for controlling where files are imported.
    *
-   * Supports two types of mappings:
+   * Supports multiple mapping formats:
+   *
+   * **Simple string format:**
    * - **File mapping**: `'docs/README.md': 'docs/overview.md'` - moves a specific file to a new path
    * - **Folder mapping**: `'docs/capabilities/': 'docs/'` - moves all files from source folder to target folder
+   *
+   * **Enhanced object format with cross-section linking:**
+   * - `'docs/api/': { target: 'api/', crossSectionPath: '/reference/api' }`
    *
    * **Important**: Folder mappings require trailing slashes to distinguish from file mappings.
    * - ✅ `'docs/capabilities/': 'docs/'` (folder mapping - moves all files)
    * - ❌ `'docs/capabilities': 'docs/'` (treated as exact file match)
+   *
+   * When using enhanced format, link mappings will be automatically generated for cross-section references.
+   * If `crossSectionPath` is not specified, it will be inferred from the basePath.
    */
-  pathMappings?: Record<string, string>;
+  pathMappings?: Record<string, PathMappingValue>;
 }
 
 
@@ -282,47 +309,6 @@ export interface Loader extends AstroLoader {
   load: (context: LoaderContext) => Promise<void>;
 }
 
-/**
- * Represents a single file entry in the sync manifest
- */
-export interface ManifestEntry {
-  /** File path within the repository */
-  path: string;
-  /** Local file system path */
-  localPath: string;
-  /** Last modified timestamp from GitHub */
-  lastModified?: string;
-  /** ETag from GitHub response */
-  etag?: string;
-  /** Content digest for change detection */
-  digest?: string;
-}
-
-/**
- * Manifest file tracking synced content
- */
-export interface SyncManifest {
-  /** Map of file IDs to their manifest entries */
-  files: Record<string, ManifestEntry>;
-  /** Timestamp of last sync operation */
-  lastSync: string;
-  /** Configuration hash to detect config changes */
-  configHash?: string;
-}
-
-/**
- * Plan for synchronizing files
- */
-export interface SyncPlan {
-  /** Files to be added (new files) */
-  toAdd: ManifestEntry[];
-  /** Files to be updated (changed files) */
-  toUpdate: ManifestEntry[];
-  /** Files to be deleted (no longer exist remotely) */
-  toDelete: ManifestEntry[];
-  /** Files that haven't changed (skip processing) */
-  unchanged: ManifestEntry[];
-}
 
 /**
  * Statistics for a sync operation

@@ -7,7 +7,7 @@ Load content from GitHub repositories into Astro content collections with flexib
 - 🎯 **Pattern-Based Import** - Use glob patterns to selectively import content with per-pattern configuration
 - 🖼️ **Asset Management** - Automatically download and transform asset references in markdown files
 - 🛠️ **Content Transforms** - Apply custom transformations to content during import, with pattern-specific transforms
-- ⚡ **Change Detection** - Built-in dry-run mode to check for repository changes without importing
+- ⚡ **Intelligent Change Detection** - Ref-aware commit tracking that only triggers re-imports when your target branch/tag actually changes
 - 🔒 **Stable Imports** - Non-destructive approach that preserves local content collections
 - 🚀 **Optimized Performance** - Smart directory scanning to minimize GitHub API calls
 
@@ -62,6 +62,88 @@ export const collections = {
   }),
 };
 ```
+
+## Multi-Ref Configuration Example
+
+Track multiple git references from the same repository independently:
+
+```typescript
+import { defineCollection } from "astro:content";
+import { docsLoader } from "@astrojs/starlight/loaders";
+import { docsSchema } from "@astrojs/starlight/schema";
+import { Octokit } from "octokit";
+import { githubLoader } from "@larkiny/astro-github-loader";
+import type { ImportOptions } from "@larkiny/astro-github-loader";
+
+const MULTI_REF_CONTENT: ImportOptions[] = [
+  {
+    name: "Stable Docs",
+    owner: "myorg",
+    repo: "docs",
+    ref: "v2.0.0", // Immutable tag - never re-imports
+    includes: [
+      {
+        pattern: "docs/**/*.md",
+        basePath: "src/content/docs/v2",
+      },
+    ],
+  },
+  {
+    name: "Latest Docs",
+    owner: "myorg",
+    repo: "docs",
+    ref: "main", // Live branch - re-imports only on main commits
+    includes: [
+      {
+        pattern: "docs/**/*.md",
+        basePath: "src/content/docs/latest",
+      },
+    ],
+  },
+  {
+    name: "Beta Features",
+    owner: "myorg",
+    repo: "docs",
+    ref: "beta", // Feature branch - ignores main/other branch commits
+    includes: [
+      {
+        pattern: "experimental/**/*.md",
+        basePath: "src/content/docs/beta",
+      },
+    ],
+  },
+];
+
+const octokit = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
+
+export const collections = {
+  docs: defineCollection({
+    loader: {
+      name: "docs",
+      load: async (context) => {
+        await docsLoader().load(context);
+
+        // Each config is tracked independently by ref
+        for (const config of MULTI_REF_CONTENT) {
+          await githubLoader({
+            octokit,
+            configs: [config],
+            dryRun: false,
+          }).load(context);
+        }
+      },
+    },
+    schema: docsSchema(),
+  }),
+};
+```
+
+In this example:
+- **Stable docs** (v2.0.0 tag): Never re-imports, provides stable reference
+- **Latest docs** (main branch): Only re-imports when main branch changes
+- **Beta features** (beta branch): Only re-imports when beta branch changes
+
+Commits to `develop`, `feature-xyz`, or any other branches are completely ignored by all three configs.
 
 ## Processing Pipeline
 
@@ -442,6 +524,23 @@ npm run import:check
    Last imported: 1 day ago
 ```
 
+### How Change Detection Works
+
+The loader uses intelligent, ref-aware change detection:
+
+- **Per-ref tracking**: Each `owner/repo@ref` combination is tracked separately
+- **Branch isolation**: Commits to other branches are completely ignored
+- **Tag immutability**: Fixed tags (e.g., `v1.0.0`) never trigger re-imports
+- **Efficient checking**: Only the latest commit of your target ref is checked
+
+**Examples**:
+- Config tracking `main` branch → only `main` commits trigger re-import
+- Config tracking `v2.1.0` tag → never re-imports (tags are immutable)
+- Config tracking `feature-branch` → ignores commits to `main`, `develop`, etc.
+- Multiple configs for same repo with different refs → tracked independently
+
+This means you can safely track multiple refs from the same repository without unnecessary re-imports when unrelated branches change.
+
 ## Configuration Options
 
 ### ImportOptions Interface
@@ -556,7 +655,7 @@ The loader includes several optimizations:
 
 - **Smart directory scanning**: Only scans directories that match include patterns
 - **Efficient API usage**: Minimizes GitHub API calls through targeted requests
-- **Change detection**: Uses ETags and manifest files to avoid unnecessary downloads
+- **Ref-aware change detection**: Tracks commit SHA for specific git references (branches/tags) to avoid unnecessary downloads when unrelated branches change
 - **Concurrent processing**: Downloads and processes files in parallel
 
 ## Installation & Setup
