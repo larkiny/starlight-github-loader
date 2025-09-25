@@ -253,6 +253,14 @@ function pathToStarlightUrl(targetPath: string, stripPrefixes: string[]): string
 
 /**
  * Transform a single markdown link
+ *
+ * Processing order:
+ * 1. Skip external links (no transformation)
+ * 2. Normalize path relative to current file
+ * 3. Apply global path mappings to normalized path
+ * 4. Check if link targets imported file in sourceToTargetMap
+ * 5. Apply non-global path mappings if unresolved
+ * 6. Check custom handlers
  */
 function transformLink(linkText: string, linkUrl: string, context: LinkContext): string {
   // Skip external links FIRST - no transformations should ever be applied to them

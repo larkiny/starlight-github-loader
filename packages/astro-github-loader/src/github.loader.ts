@@ -46,6 +46,13 @@ async function performSelectiveCleanups(
 /**
  * Loads data from GitHub repositories based on the provided configurations and options.
  *
+ * Features:
+ * - Sequential processing with spinner feedback for long-running operations
+ * - Dry run mode for change detection without actual imports
+ * - Configurable logging levels per configuration
+ * - Import state tracking for incremental updates
+ * - Content store management with optional clearing
+ *
  * @return A loader object responsible for managing the data loading process.
  */
 export function githubLoader({
@@ -125,15 +132,18 @@ export function githubLoader({
         const startTime = Date.now();
 
         try {
-          // Perform the import with timing
-          globalLogger.info(`🔄 Starting import for ${configName}`);
-
-          const stats = await toCollectionEntry({
-            context: { ...context, logger: configLogger as any },
-            octokit,
-            options: config,
-            fetchOptions,
-          });
+          // Perform the import with spinner
+          const stats = await globalLogger.withSpinner(
+            `🔄 Importing ${configName}...`,
+            () => toCollectionEntry({
+              context: { ...context, logger: configLogger as any },
+              octokit,
+              options: config,
+              fetchOptions,
+            }),
+            `✅ ${configName} imported successfully`,
+            `❌ ${configName} import failed`
+          );
 
           summary.duration = Date.now() - startTime;
           summary.filesProcessed = stats?.processed || 0;

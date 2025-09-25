@@ -37,11 +37,15 @@ export interface CleanupSummary {
 }
 
 /**
- * Centralized logger with configurable verbosity levels
+ * Centralized logger with configurable verbosity levels and spinner support for long-running operations
  */
 export class Logger {
   private level: LogLevel;
   private prefix: string;
+  private spinnerInterval?: NodeJS.Timeout;
+  private spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  private spinnerIndex = 0;
+  private spinnerStartTime?: number;
 
   constructor(options: LoggerOptions) {
     this.level = options.level;
@@ -226,6 +230,87 @@ export class Logger {
     } catch (error) {
       const duration = Date.now() - startTime;
       this.error(`❌ Failed: ${label} (${duration}ms): ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Format duration in human-readable format
+   */
+  private formatDuration(seconds: number): string {
+    if (seconds < 60) {
+      return `${seconds}s`;
+    } else if (seconds < 3600) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}m ${secs}s`;
+    } else {
+      const hours = Math.floor(seconds / 3600);
+      const mins = Math.floor((seconds % 3600) / 60);
+      return `${hours}h ${mins}m`;
+    }
+  }
+
+  /**
+   * Start a spinner with duration timer for long-running operations
+   */
+  startSpinner(message: string = 'Processing...'): void {
+    if (this.level === 'silent') return;
+
+    this.spinnerStartTime = Date.now();
+    this.spinnerIndex = 0;
+
+    const updateSpinner = () => {
+      const elapsed = Math.floor((Date.now() - this.spinnerStartTime!) / 1000);
+      const spinner = this.spinnerChars[this.spinnerIndex];
+      const duration = this.formatDuration(elapsed);
+      const formattedMessage = this.formatMessage(`${message} ${spinner} (${duration})`);
+      process.stdout.write(`\r${formattedMessage}`);
+      this.spinnerIndex = (this.spinnerIndex + 1) % this.spinnerChars.length;
+    };
+
+    // Initial display
+    updateSpinner();
+
+    // Update every 100ms
+    this.spinnerInterval = setInterval(updateSpinner, 100);
+  }
+
+  /**
+   * Stop the spinner and optionally show a final message
+   */
+  stopSpinner(finalMessage?: string): void {
+    if (this.spinnerInterval) {
+      clearInterval(this.spinnerInterval);
+      this.spinnerInterval = undefined;
+    }
+
+    if (finalMessage && this.spinnerStartTime) {
+      const totalTime = Math.floor((Date.now() - this.spinnerStartTime) / 1000);
+      const duration = this.formatDuration(totalTime);
+      const formattedMessage = this.formatMessage(`${finalMessage} (${duration})`);
+      process.stdout.write(`\r${formattedMessage}\n`);
+    } else if (finalMessage) {
+      const formattedMessage = this.formatMessage(finalMessage);
+      process.stdout.write(`\r${formattedMessage}\n`);
+    } else {
+      process.stdout.write('\r\x1b[K'); // Clear the line
+    }
+
+    this.spinnerStartTime = undefined;
+  }
+
+  /**
+   * Execute a function with spinner feedback
+   */
+  async withSpinner<T>(message: string, fn: () => Promise<T>, successMessage?: string, errorMessage?: string): Promise<T> {
+    this.startSpinner(message);
+    try {
+      const result = await fn();
+      this.stopSpinner(successMessage || `✅ ${message.replace(/^[🔄⏳]?\s*/, '')} completed`);
+      return result;
+    } catch (error) {
+      this.stopSpinner(errorMessage || `❌ ${message.replace(/^[🔄⏳]?\s*/, '')} failed`);
       throw error;
     }
   }
