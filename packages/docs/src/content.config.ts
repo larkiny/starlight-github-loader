@@ -8,8 +8,13 @@ import {
   type ImportOptions,
   type LoaderContext,
 } from "@larkiny/astro-github-loader";
-import { createStarlightLinkMappings } from "../imports/transforms/links.js";
-import { convertH1ToTitle } from "../imports/transforms/common.js";
+import { generateStarlightLinkMappings } from "../imports/transforms/links.js";
+import {
+  convertH1ToTitle,
+  conditionalTransform,
+  matchesPath,
+  createRemoveContentUpToHeading,
+} from "../imports/transforms/common.js";
 import {
   createFrontmatterTransform,
   createPathBasedFrontmatterTransform,
@@ -25,85 +30,52 @@ const REMOTE_CONTENT: ImportOptions[] = [
     assetsBaseUrl: "@assets/imports/algokit/cli",
     includes: [
       {
-        pattern: "docs/features/**/*.md",
+        pattern: "docs/{features/**/*.md,algokit.md}",
         basePath: "src/content/docs/algokit/cli",
-      },
-      {
-        pattern: "docs/algokit.md",
-        basePath: "src/content/docs/algokit/cli",
+        pathMappings: {
+          "docs/features/": "",
+          "docs/algokit.md": "overview.md",
+          "docs/cli/index.md": "index.md",
+        },
         transforms: [
-          createFrontmatterTransform({
-            frontmatter: {
-              title: "AlgoKit CLI Overview",
-              sidebar: { label: "Overview", order: 0 },
-            },
-            mode: "merge",
-            preserveExisting: false,
-          }),
+          conditionalTransform(
+            (path) => matchesPath("docs/algokit.md", path),
+            createFrontmatterTransform({
+              frontmatter: {
+                title: "AlgoKit CLI Overview",
+                sidebar: { label: "Overview", order: 0 },
+              },
+              mode: "merge",
+              preserveExisting: false,
+            }),
+          ),
         ],
       },
       {
         pattern: "docs/cli/index.md",
         basePath: "src/content/docs/reference/algokit-cli/",
+        pathMappings: {
+          "docs/cli/index.md": "index.md",
+        },
+        transforms: [createRemoveContentUpToHeading(/^# algokit$/m)],
       },
     ],
     transforms: [convertH1ToTitle],
     linkTransform: {
       stripPrefixes: ["src/content/docs"],
       linkMappings: [
-        ...createStarlightLinkMappings(),
-        // Map ../cli/ to reference/algokit-cli for cross-repository links (after index.md is stripped)
+        ...generateStarlightLinkMappings(),
+        // Map unresolved CLI links to reference section
         {
           pattern: /^\.\.\/cli\/?$/,
-          replacement: (match: string, anchor: string) => {
-            return `/reference/algokit-cli`;
-          },
+          replacement: `/reference/algokit-cli`,
           global: true,
-          description: "Map CLI reference links to reference section",
         },
-        // Map README links to AlgoKit Introduction
+        // Map README links to AlgoKit Introduction doc
         {
           pattern: /^\.\.\/\.\.\/README\.md$/,
-          replacement: (match: string, anchor: string) => {
-            return `/algokit/algokit-intro`;
-          },
+          replacement: `/algokit/algokit-intro`,
           global: true,
-          description: "Map README links to AlgoKit Introduction",
-        },
-      ],
-    },
-    enabled: true,
-  },
-  {
-    name: "AlgoKit Utils Python Docs",
-    owner: "algorandfoundation",
-    repo: "algokit-utils-py",
-    ref: "chore/reference-docs",
-    includes: [
-      {
-        pattern: "docs/markdown/autoapi/algokit_utils/**/*.md",
-        basePath: "src/content/docs/reference/algokit-utils-py/api",
-        pathMappings: {
-          "docs/markdown/autoapi/algokit_utils/": "",
-        },
-      },
-    ],
-    transforms: [convertH1ToTitle],
-    linkTransform: {
-      stripPrefixes: ["src/content/docs"],
-      linkMappings: [
-        ...createStarlightLinkMappings(),
-        {
-          contextFilter: (context) =>
-            context.sourcePath.startsWith("docs/markdown/autoapi/algokit_utils/"),
-          relativeLinks: true,
-          pattern: /.*/,
-          replacement: (match: string, anchor: string, context: any) => {
-            const relativePath = match.replace(/\.md$/, "");
-            const finalPath = `/reference/algokit-utils-py/api/${relativePath}`;
-            return finalPath.replace(/\/index$/, "/");
-          },
-          global: false,
         },
       ],
     },
@@ -114,6 +86,7 @@ const REMOTE_CONTENT: ImportOptions[] = [
 const IMPORT_REMOTE = process.env.IMPORT_GITHUB === "true";
 const GITHUB_API_CLIENT = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
 const IS_DRY_RUN = process.env.IMPORT_DRY_RUN === "true";
+const FORCE_IMPORT = process.env.FORCE_IMPORT === "true";
 
 export const collections = {
   docs: defineCollection({
@@ -137,6 +110,7 @@ export const collections = {
                 configs: [config],
                 clear: config.clear,
                 dryRun: IS_DRY_RUN,
+                force: FORCE_IMPORT,
               }).load(context as LoaderContext);
               console.log(`✅ ${config.name} loaded successfully`);
             } catch (error) {

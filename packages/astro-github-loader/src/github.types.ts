@@ -159,6 +159,12 @@ export type GithubLoaderOptions = {
    * @default 'default'
    */
   logLevel?: LogLevel;
+  /**
+   * When true, forces a full import even if no repository changes are detected.
+   * When false (default), skips processing if repository hasn't changed.
+   * @default false
+   */
+  force?: boolean;
 };
 
 /**
@@ -204,6 +210,12 @@ export type CollectionEntryOptions = {
    * This variable allows customization of the behavior of the fetch process.
    */
   fetchOptions?: FetchOptions;
+  /**
+   * When true, forces a full import even if no repository changes are detected.
+   * When false (default), skips processing if repository hasn't changed.
+   * @default false
+   */
+  force?: boolean;
 };
 
 /**

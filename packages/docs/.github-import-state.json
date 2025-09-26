@@ -1,33 +1,12 @@
 {
   "imports": {
-    "larkiny/algokit-cli-docs/.devportal/starlight@docs/starlight-preview": {
-      "name": "Algokit CLI Docs",
-      "repoId": "larkiny/algokit-cli-docs/.devportal/starlight@docs/starlight-preview",
-      "lastCommitSha": "4f8c1f8473c93d4c16bcc9f7cea73991174ced12",
-      "lastImported": "2025-09-13T10:23:59.435Z",
-      "ref": "docs/starlight-preview"
-    },
-    "larkiny/algokit-cli-docs@main": {
-      "name": "AlgoKit CLI Docs",
-      "repoId": "larkiny/algokit-cli-docs@main",
-      "lastCommitSha": "d7fdc1207d443c056d5bf6a616ec01b253ea25e2",
-      "lastImported": "2025-09-22T07:58:45.285Z",
-      "ref": "main"
-    },
     "algorandfoundation/algokit-cli@chore/content-fix": {
       "name": "AlgoKit CLI Docs",
       "repoId": "algorandfoundation/algokit-cli@chore/content-fix",
-      "lastCommitSha": "88060b88d47d97d33183b97ba53f9ff15bd305c4",
-      "lastImported": "2025-09-24T10:25:04.046Z",
+      "lastCommitSha": "40762f855a87326e16ce94e94673c7fefac5c025",
+      "lastImported": "2025-09-25T15:44:56.729Z",
       "ref": "chore/content-fix"
-    },
-    "algorandfoundation/algokit-utils-py@chore/reference-docs": {
-      "name": "AlgoKit Utils Python Docs",
-      "repoId": "algorandfoundation/algokit-utils-py@chore/reference-docs",
-      "lastCommitSha": "ec3856b55ba88bde87aa28b522280dfae537d0bf",
-      "lastImported": "2025-09-24T10:26:35.196Z",
-      "ref": "chore/reference-docs"
     }
   },
-  "lastChecked": "2025-09-13T09:13:26.336Z"
+  "lastChecked": "2025-09-25T15:03:21.320Z"
 }
