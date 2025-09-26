@@ -62,6 +62,7 @@ export function githubLoader({
   clear = false,
   dryRun = false,
   logLevel,
+  force = false,
 }: GithubLoaderOptions): Loader {
   return {
     name: "github-loader",
@@ -140,6 +141,7 @@ export function githubLoader({
               octokit,
               options: config,
               fetchOptions,
+              force,
             }),
             `✅ ${configName} imported successfully`,
             `❌ ${configName} import failed`

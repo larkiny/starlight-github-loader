@@ -54,14 +54,14 @@ export interface RepositoryChangeInfo {
 /**
  * Creates a unique identifier for an import configuration
  */
-function createConfigId(config: ImportOptions): string {
+export function createConfigId(config: ImportOptions): string {
   return `${config.owner}/${config.repo}@${config.ref || 'main'}`;
 }
 
 /**
  * Loads the import state from the state file
  */
-async function loadImportState(workingDir: string): Promise<StateFile> {
+export async function loadImportState(workingDir: string): Promise<StateFile> {
   const statePath = join(workingDir, STATE_FILENAME);
   
   if (!existsSync(statePath)) {
@@ -99,7 +99,7 @@ async function saveImportState(workingDir: string, state: StateFile): Promise<vo
 /**
  * Gets the latest commit information for a repository path
  */
-async function getLatestCommitInfo(
+export async function getLatestCommitInfo(
   octokit: any,
   config: ImportOptions,
   signal?: AbortSignal

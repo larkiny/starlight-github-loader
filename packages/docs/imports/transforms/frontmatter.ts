@@ -1,15 +1,15 @@
-import type { TransformFunction } from "@larkiny/astro-github-loader";
+import type { TransformFunction } from '@larkiny/astro-github-loader';
 import type {
   FrontmatterTransformOptions,
   StarlightFrontmatter,
   YamlValue,
-} from "./types.js";
+} from './types.js';
 import {
   parseFrontmatter,
   combineFrontmatterAndContent,
   deepMerge,
   validateStarlightFrontmatter,
-} from "./yaml-utils.js";
+} from './yaml-utils.js';
 
 /**
  * Creates a transform function that adds, merges, or replaces frontmatter in markdown content
@@ -19,14 +19,14 @@ import {
 export function createFrontmatterTransform(
   options: FrontmatterTransformOptions,
 ): TransformFunction {
-  const { frontmatter, mode = "merge", preserveExisting = true } = options;
+  const { frontmatter, mode = 'merge', preserveExisting = true } = options;
 
   return (content: string, context): string => {
     const parsed = parseFrontmatter(content);
     let newFrontmatter: Record<string, YamlValue>;
 
     switch (mode) {
-      case "add":
+      case 'add':
         // Only add frontmatter if none exists
         if (parsed.hasFrontmatter) {
           return content; // Return unchanged if frontmatter already exists
@@ -34,12 +34,12 @@ export function createFrontmatterTransform(
         newFrontmatter = frontmatter as Record<string, YamlValue>;
         break;
 
-      case "replace":
+      case 'replace':
         // Completely replace existing frontmatter
         newFrontmatter = frontmatter as Record<string, YamlValue>;
         break;
 
-      case "merge":
+      case 'merge':
       default:
         // Merge with existing frontmatter
         newFrontmatter = deepMerge(
@@ -87,7 +87,7 @@ export function createTitleTransform(options?: {
 
     return createFrontmatterTransform({
       frontmatter: { title },
-      mode: "merge",
+      mode: 'merge',
       preserveExisting: !options?.override,
     })(content, context);
   };
@@ -111,7 +111,7 @@ export function createSourceInfoTransform(
       source: {
         owner: context.options.owner,
         repo: context.options.repo,
-        ref: context.options.ref || "main",
+        ref: context.options.ref || 'main',
         path: context.path,
         importedAt: new Date().toISOString(),
       },
@@ -119,7 +119,7 @@ export function createSourceInfoTransform(
 
     return createFrontmatterTransform({
       frontmatter: { ...sourceInfo, ...customProps },
-      mode: "merge",
+      mode: 'merge',
       preserveExisting: true,
     })(content, context);
   };
@@ -153,11 +153,11 @@ export function createPathBasedFrontmatterTransform(
  * @returns Transform function
  */
 export function createSidebarTransform(
-  sidebarConfig: StarlightFrontmatter["sidebar"],
+  sidebarConfig: StarlightFrontmatter['sidebar'],
 ): TransformFunction {
   return createFrontmatterTransform({
     frontmatter: { sidebar: sidebarConfig },
-    mode: "merge",
+    mode: 'merge',
     preserveExisting: true,
   });
 }
@@ -170,7 +170,7 @@ export function createSidebarTransform(
 export function createDraftTransform(isDraft = true): TransformFunction {
   return createFrontmatterTransform({
     frontmatter: { draft: isDraft },
-    mode: "merge",
+    mode: 'merge',
     preserveExisting: false, // Allow overriding draft status
   });
 }
@@ -184,16 +184,16 @@ function deriveTitleFromPath(path: string): string {
   // Remove file extension and directory paths
   const basename =
     path
-      .split("/")
+      .split('/')
       .pop()
-      ?.replace(/\.(md|mdx)$/, "") || "Untitled";
+      ?.replace(/\.(md|mdx)$/, '') || 'Untitled';
 
   // Convert kebab-case and snake_case to title case
   return basename
-    .replace(/[-_]/g, " ")
-    .split(" ")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
+    .replace(/[-_]/g, ' ')
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 /**
