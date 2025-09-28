@@ -4,7 +4,6 @@ import path, { join, dirname, basename, extname } from "node:path";
 import picomatch from "picomatch";
 import { globalLinkTransform, generateAutoLinkMappings, type ImportedFile } from "./github.link-transform.js";
 import type { Logger } from "./github.logger.js";
-import { getLatestCommitInfo, loadImportState, createConfigId } from "./github.dryrun.js";
 
 import {
   INVALID_SERVICE_RESPONSE,
@@ -663,41 +662,6 @@ export async function toCollectionEntry({
   // Get logger from context - it should be our Logger instance (initialize early)
   const logger = context.logger as unknown as Logger;
 
-  // Repository-level caching - simple all-or-nothing approach
-  const configName = options.name || `${owner}/${repo}`;
-  const configId = createConfigId(options);
-
-  if (!force) {
-    try {
-      const state = await loadImportState(process.cwd());
-      const currentState = state.imports[configId];
-
-      if (currentState && currentState.lastCommitSha) {
-        logger.debug(`🔍 Checking repository changes for ${configName}...`);
-        const latestCommit = await getLatestCommitInfo(octokit, options, signal);
-
-        if (latestCommit && currentState.lastCommitSha === latestCommit.sha) {
-          logger.info(`✅ Repository ${configName} unchanged (${latestCommit.sha.slice(0, 7)}) - skipping import`);
-          return {
-            processed: 0,
-            updated: 0,
-            unchanged: 0,
-            assetsDownloaded: 0,
-            assetsCached: 0,
-          };
-        } else if (latestCommit) {
-          logger.info(`🔄 Repository ${configName} changed (${currentState.lastCommitSha?.slice(0, 7) || 'unknown'} -> ${latestCommit.sha.slice(0, 7)}) - proceeding with import`);
-        }
-      } else {
-        logger.debug(`📥 First time importing ${configName} - no previous state found`);
-      }
-    } catch (error) {
-      logger.warn(`Failed to check repository state for ${configName}: ${error instanceof Error ? error.message : String(error)}`);
-      // Continue with import if state check fails
-    }
-  } else {
-    logger.info(`🔄 Force mode enabled for ${configName} - proceeding with full import`);
-  }
 
   // Get all unique directory prefixes from include patterns to limit scanning
   const directoriesToScan = new Set<string>();
