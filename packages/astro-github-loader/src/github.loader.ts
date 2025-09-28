@@ -1,6 +1,6 @@
 import { toCollectionEntry } from "./github.content.js";
 import { performSelectiveCleanup } from "./github.cleanup.js";
-import { performDryRun, displayDryRunResults, updateImportState } from "./github.dryrun.js";
+import { performDryRun, displayDryRunResults, updateImportState, loadImportState, createConfigId, getLatestCommitInfo } from "./github.dryrun.js";
 import { createLogger, type Logger, type ImportSummary } from "./github.logger.js";
 
 import type {
@@ -133,6 +133,44 @@ export function githubLoader({
         const startTime = Date.now();
 
         try {
+          // Repository-level caching check before spinner
+          const configId = createConfigId(config);
+
+          if (!force) {
+            try {
+              const state = await loadImportState(process.cwd());
+              const currentState = state.imports[configId];
+
+              if (currentState && currentState.lastCommitSha) {
+                configLogger.debug(`🔍 Checking repository changes for ${configName}...`);
+                const latestCommit = await getLatestCommitInfo(octokit, config);
+
+                if (latestCommit && currentState.lastCommitSha === latestCommit.sha) {
+                  configLogger.info(`✅ Repository ${configName} unchanged (${latestCommit.sha.slice(0, 7)}) - skipping import`);
+
+                  // Update summary for unchanged repository
+                  summary.duration = Date.now() - startTime;
+                  summary.filesProcessed = 0;
+                  summary.filesUpdated = 0;
+                  summary.filesUnchanged = 0;
+                  summary.status = 'success';
+
+                  configLogger.logImportSummary(summary);
+                  continue; // Skip to next config
+                } else if (latestCommit) {
+                  configLogger.info(`🔄 Repository ${configName} changed (${currentState.lastCommitSha?.slice(0, 7) || 'unknown'} -> ${latestCommit.sha.slice(0, 7)}) - proceeding with import`);
+                }
+              } else {
+                configLogger.debug(`📥 First time importing ${configName} - no previous state found`);
+              }
+            } catch (error) {
+              configLogger.warn(`Failed to check repository state for ${configName}: ${error instanceof Error ? error.message : String(error)}`);
+              // Continue with import if state check fails
+            }
+          } else {
+            configLogger.info(`🔄 Force mode enabled for ${configName} - proceeding with full import`);
+          }
+
           // Perform the import with spinner
           const stats = await globalLogger.withSpinner(
             `🔄 Importing ${configName}...`,

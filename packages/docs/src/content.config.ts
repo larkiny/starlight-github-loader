@@ -102,9 +102,6 @@ export const collections = {
             if (!config.enabled) continue;
 
             try {
-              console.log(
-                `📥 Loading ${config.name} (clear: ${config.clear})...`,
-              );
               await githubLoader({
                 octokit: GITHUB_API_CLIENT,
                 configs: [config],
@@ -112,7 +109,6 @@ export const collections = {
                 dryRun: IS_DRY_RUN,
                 force: FORCE_IMPORT,
               }).load(context as LoaderContext);
-              console.log(`✅ ${config.name} loaded successfully`);
             } catch (error) {
               console.error(`❌ Error loading ${config.name}:`, error);
             }
