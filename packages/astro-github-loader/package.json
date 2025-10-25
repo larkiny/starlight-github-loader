@@ -42,6 +42,7 @@
     "astro": "astro"
   },
   "dependencies": {
+    "@octokit/auth-app": "^8.1.1",
     "github-slugger": "^2.0.0",
     "octokit": "^4.1.2",
     "picomatch": "^4.0.2"

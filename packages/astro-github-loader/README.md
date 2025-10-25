@@ -17,11 +17,11 @@ Load content from GitHub repositories into Astro content collections with flexib
 import { defineCollection } from "astro:content";
 import { docsLoader } from "@astrojs/starlight/loaders";
 import { docsSchema } from "@astrojs/starlight/schema";
-import { Octokit } from "octokit";
-import { githubLoader } from "@larkiny/astro-github-loader";
-import type {
-  ImportOptions,
-  LoaderContext,
+import {
+  githubLoader,
+  createOctokitFromEnv,
+  type ImportOptions,
+  type LoaderContext,
 } from "@larkiny/astro-github-loader";
 
 const REMOTE_CONTENT: ImportOptions[] = [
@@ -39,7 +39,8 @@ const REMOTE_CONTENT: ImportOptions[] = [
   },
 ];
 
-const octokit = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
+// Automatically uses GitHub App or Personal Access Token based on env vars
+const octokit = createOctokitFromEnv();
 
 export const collections = {
   docs: defineCollection({
@@ -63,6 +64,116 @@ export const collections = {
 };
 ```
 
+## Authentication
+
+The loader supports two authentication methods with different rate limits:
+
+| Method | Rate Limit | Best For |
+|--------|-----------|----------|
+| **GitHub App** (Recommended) | 15,000 requests/hour | Production, large imports, organizational use |
+| **Personal Access Token** | 5,000 requests/hour | Development, small imports |
+
+### Option 1: GitHub App Authentication (Recommended - 3x Rate Limit)
+
+**Step 1: Create a GitHub App**
+
+1. Go to GitHub Settings → Developer settings → GitHub Apps → [New GitHub App](https://github.com/settings/apps/new)
+2. Fill in the required fields:
+   - **GitHub App name**: `your-org-docs-loader` (or any name)
+   - **Homepage URL**: Your documentation site URL
+   - **Webhook**: Uncheck "Active" (not needed)
+3. Set **Repository permissions**:
+   - Contents: **Read-only**
+4. Click **Create GitHub App**
+
+**Step 2: Generate Private Key**
+
+1. In your GitHub App settings, scroll to "Private keys"
+2. Click **Generate a private key**
+3. Save the downloaded `.pem` file securely
+
+**Step 3: Install the App**
+
+1. In your GitHub App settings, click **Install App**
+2. Select your organization or personal account
+3. Choose **All repositories** or **Only select repositories**
+4. Note the **Installation ID** from the URL: `https://github.com/settings/installations/{installation_id}`
+
+**Step 4: Configure Environment Variables**
+
+```bash
+# .env
+GITHUB_APP_ID=123456
+GITHUB_APP_INSTALLATION_ID=12345678
+# For the private key, you have two options:
+
+# Option A: Direct PEM content (multiline)
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEA...
+...
+-----END RSA PRIVATE KEY-----"
+
+# Option B: Base64 encoded (single line - easier for .env files)
+# Run: cat your-app.private-key.pem | base64 | tr -d '\n'
+GITHUB_APP_PRIVATE_KEY="LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0..."
+```
+
+**Step 5: Use in Your Config**
+
+```typescript
+import { createOctokitFromEnv } from "@larkiny/astro-github-loader";
+
+// Automatically uses GitHub App if env vars are set
+const octokit = createOctokitFromEnv();
+```
+
+### Option 2: Personal Access Token (PAT)
+
+**Step 1: Create a Token**
+
+1. Go to GitHub Settings → Developer settings → Personal access tokens → [Tokens (classic)](https://github.com/settings/tokens)
+2. Click **Generate new token (classic)**
+3. Select scopes:
+   - `public_repo` (for public repositories)
+   - `repo` (for private repositories)
+4. Generate and copy the token
+
+**Step 2: Configure Environment Variable**
+
+```bash
+# .env
+GITHUB_TOKEN=ghp_your_token_here
+```
+
+**Step 3: Use in Your Config**
+
+```typescript
+import { createOctokitFromEnv } from "@larkiny/astro-github-loader";
+
+// Automatically falls back to PAT if GitHub App vars aren't set
+const octokit = createOctokitFromEnv();
+```
+
+### Manual Authentication (Advanced)
+
+For more control, you can manually create the Octokit instance:
+
+```typescript
+import { createAuthenticatedOctokit } from "@larkiny/astro-github-loader";
+
+// GitHub App (explicit)
+const octokit = createAuthenticatedOctokit({
+  appId: process.env.GITHUB_APP_ID!,
+  privateKey: process.env.GITHUB_APP_PRIVATE_KEY!,
+  installationId: process.env.GITHUB_APP_INSTALLATION_ID!,
+});
+
+// Personal Access Token (explicit)
+const octokit = createAuthenticatedOctokit({
+  token: process.env.GITHUB_TOKEN!,
+});
+```
+
 ## Multi-Ref Configuration Example
 
 Track multiple git references from the same repository independently:
@@ -71,9 +182,11 @@ Track multiple git references from the same repository independently:
 import { defineCollection } from "astro:content";
 import { docsLoader } from "@astrojs/starlight/loaders";
 import { docsSchema } from "@astrojs/starlight/schema";
-import { Octokit } from "octokit";
-import { githubLoader } from "@larkiny/astro-github-loader";
-import type { ImportOptions } from "@larkiny/astro-github-loader";
+import {
+  githubLoader,
+  createOctokitFromEnv,
+  type ImportOptions,
+} from "@larkiny/astro-github-loader";
 
 const MULTI_REF_CONTENT: ImportOptions[] = [
   {
@@ -114,7 +227,7 @@ const MULTI_REF_CONTENT: ImportOptions[] = [
   },
 ];
 
-const octokit = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
+const octokit = createOctokitFromEnv();
 
 export const collections = {
   docs: defineCollection({
@@ -661,14 +774,22 @@ The loader includes several optimizations:
 ## Installation & Setup
 
 ```bash
-npm install @larkiny/astro-github-loader octokit
+npm install @larkiny/astro-github-loader
 ```
 
-Set up your GitHub token in `.env`:
+Set up your authentication in `.env`:
 
 ```bash
-GITHUB_TOKEN=your_github_token_here
+# Option 1: GitHub App (recommended - 15,000 requests/hour)
+GITHUB_APP_ID=123456
+GITHUB_APP_INSTALLATION_ID=12345678
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----..."
+
+# Option 2: Personal Access Token (5,000 requests/hour)
+GITHUB_TOKEN=ghp_your_token_here
 ```
+
+See the [Authentication](#authentication) section for detailed setup instructions.
 
 ## License
 

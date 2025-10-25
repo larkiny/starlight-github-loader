@@ -2,9 +2,10 @@ import { defineCollection } from "astro:content";
 import { docsLoader } from "@astrojs/starlight/loaders";
 import { docsSchema } from "@astrojs/starlight/schema";
 
-import { Octokit } from "octokit";
 import {
   githubLoader,
+  createAuthenticatedOctokit,
+  createOctokitFromEnv,
   type ImportOptions,
   type LoaderContext,
 } from "@larkiny/astro-github-loader";
@@ -84,7 +85,25 @@ const REMOTE_CONTENT: ImportOptions[] = [
 ];
 
 const IMPORT_REMOTE = process.env.IMPORT_GITHUB === "true";
-const GITHUB_API_CLIENT = new Octokit({ auth: import.meta.env.GITHUB_TOKEN });
+
+// GitHub App authentication (recommended - 15,000 req/hour vs 5,000 for PAT)
+// Set GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_INSTALLATION_ID
+// Falls back to GITHUB_TOKEN if GitHub App credentials aren't provided
+const GITHUB_API_CLIENT = createOctokitFromEnv();
+
+// Alternative: Manually create Octokit with specific auth method
+// For GitHub App:
+// const GITHUB_API_CLIENT = createAuthenticatedOctokit({
+//   appId: import.meta.env.GITHUB_APP_ID,
+//   privateKey: import.meta.env.GITHUB_APP_PRIVATE_KEY,
+//   installationId: import.meta.env.GITHUB_APP_INSTALLATION_ID,
+// });
+//
+// For Personal Access Token:
+// const GITHUB_API_CLIENT = createAuthenticatedOctokit({
+//   token: import.meta.env.GITHUB_TOKEN
+// });
+
 const IS_DRY_RUN = process.env.IMPORT_DRY_RUN === "true";
 const FORCE_IMPORT = process.env.FORCE_IMPORT === "true";
 
