@@ -11,6 +11,7 @@
     "clean": "rm -rf src/content/docs/algokit/cli src/content/docs/reference/algokit-cli src/assets/imports/algokit-cli .astro",
     "import:dry-run": "IMPORT_DRY_RUN=true astro sync",
     "import:github": "IMPORT_GITHUB=true astro sync",
+    "import:force": "FORCE_IMPORT=true IMPORT_GITHUB=true astro sync",
     "lint": "eslint .",
     "prettier": "prettier --check .",
     "preview": "astro preview",
