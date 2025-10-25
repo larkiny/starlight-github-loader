@@ -36,6 +36,8 @@
   },
   "scripts": {
     "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint .",
     "prettier": "prettier --check .",
     "preview": "astro preview",
