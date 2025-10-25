@@ -1,7 +1,7 @@
 {
   "name": "@larkiny/astro-github-loader",
   "type": "module",
-  "version": "0.9.1",
+  "version": "0.10.1",
   "description": "Load content from GitHub repositories into Astro content collections with asset management and content transformations",
   "keywords": [
     "astro",
@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "github-slugger": "^2.0.0",
-    "octokit": "^4.1.2",
+    "octokit": "^5.0.4",
     "picomatch": "^4.0.2"
   },
   "peerDependencies": {
