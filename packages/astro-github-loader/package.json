@@ -36,12 +36,15 @@
   },
   "scripts": {
     "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint .",
     "prettier": "prettier --check .",
     "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
+    "@octokit/auth-app": "^8.1.1",
     "github-slugger": "^2.0.0",
     "octokit": "^5.0.4",
     "picomatch": "^4.0.2"

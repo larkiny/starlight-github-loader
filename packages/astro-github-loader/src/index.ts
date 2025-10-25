@@ -1,3 +1,4 @@
+export * from './github.auth.js'
 export * from './github.constants.js'
 export * from './github.content.js'
 export * from './github.loader.js'
