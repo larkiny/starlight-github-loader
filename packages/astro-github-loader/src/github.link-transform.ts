@@ -316,8 +316,10 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
     }
   }
 
-  // No transformation needed - return processed URL
-  return `[${linkText}](${processedNormalizedPath + anchor})`;
+  // No transformation matched - strip .md extension from unresolved internal links
+  // This handles links to files that weren't imported but should still use Starlight routing
+  const cleanPath = processedNormalizedPath.replace(/\.md$/i, '');
+  return `[${linkText}](${cleanPath + anchor})`;
 }
 
 /**
