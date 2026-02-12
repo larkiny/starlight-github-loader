@@ -2,16 +2,23 @@ import { existsSync, promises as fs } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path, { join, dirname, basename, extname } from "node:path";
 import picomatch from "picomatch";
-import { globalLinkTransform, generateAutoLinkMappings, type ImportedFile } from "./github.link-transform.js";
+import {
+  globalLinkTransform,
+  generateAutoLinkMappings,
+  type ImportedFile,
+} from "./github.link-transform.js";
 import type { Logger } from "./github.logger.js";
 
-import {
-  INVALID_SERVICE_RESPONSE,
-  INVALID_STRING_ERROR,
-  INVALID_URL_ERROR,
-} from "./github.constants.js";
+import { Octokit } from "octokit";
+import { INVALID_STRING_ERROR } from "./github.constants.js";
 
-import type { LoaderContext, CollectionEntryOptions, ImportOptions, RenderedContent, MatchedPattern } from "./github.types.js";
+import type {
+  CollectionEntryOptions,
+  ExtendedLoaderContext,
+  ImportOptions,
+  MatchedPattern,
+  TransformFunction,
+} from "./github.types.js";
 
 export interface ImportStats {
   processed: number;
@@ -31,13 +38,12 @@ export function generateId(filePath: string): string {
   let id = filePath;
 
   // Remove file extension for ID generation
-  const lastDotIndex = id.lastIndexOf('.');
+  const lastDotIndex = id.lastIndexOf(".");
   if (lastDotIndex > 0) {
     id = id.substring(0, lastDotIndex);
   }
   return id;
 }
-
 
 /**
  * Applies path mapping logic to get the final filename for a file
@@ -52,23 +58,38 @@ export function generateId(filePath: string): string {
  * @returns Final filename after applying path mapping logic
  * @internal
  */
-export function applyRename(filePath: string, matchedPattern?: MatchedPattern | null, options?: ImportOptions): string {
-  if (options?.includes && matchedPattern && matchedPattern.index < options.includes.length) {
+export function applyRename(
+  filePath: string,
+  matchedPattern?: MatchedPattern | null,
+  options?: ImportOptions,
+): string {
+  if (
+    options?.includes &&
+    matchedPattern &&
+    matchedPattern.index < options.includes.length
+  ) {
     const includePattern = options.includes[matchedPattern.index];
 
     if (includePattern.pathMappings) {
       // First check for exact file match (current behavior - backwards compatible)
       if (includePattern.pathMappings[filePath]) {
         const mappingValue = includePattern.pathMappings[filePath];
-        return typeof mappingValue === 'string' ? mappingValue : mappingValue.target;
+        return typeof mappingValue === "string"
+          ? mappingValue
+          : mappingValue.target;
       }
 
       // Then check for folder-to-folder mappings
-      for (const [sourceFolder, mappingValue] of Object.entries(includePattern.pathMappings)) {
+      for (const [sourceFolder, mappingValue] of Object.entries(
+        includePattern.pathMappings,
+      )) {
         // Check if this is a folder mapping (ends with /) and file is within it
-        if (sourceFolder.endsWith('/') && filePath.startsWith(sourceFolder)) {
+        if (sourceFolder.endsWith("/") && filePath.startsWith(sourceFolder)) {
           // Replace the source folder path with target folder path
-          const targetFolder = typeof mappingValue === 'string' ? mappingValue : mappingValue.target;
+          const targetFolder =
+            typeof mappingValue === "string"
+              ? mappingValue
+              : mappingValue.target;
           const relativePath = filePath.slice(sourceFolder.length);
           return path.posix.join(targetFolder, relativePath);
         }
@@ -88,22 +109,26 @@ export function applyRename(filePath: string, matchedPattern?: MatchedPattern | 
  * @return {string} The local file path where this content should be stored
  * @internal
  */
-export function generatePath(filePath: string, matchedPattern?: MatchedPattern | null, options?: ImportOptions): string {
+export function generatePath(
+  filePath: string,
+  matchedPattern?: MatchedPattern | null,
+  options?: ImportOptions,
+): string {
   if (matchedPattern) {
     // Extract the directory part from the pattern (before any glob wildcards)
     const pattern = matchedPattern.pattern;
     const beforeGlob = pattern.split(/[*?{]/)[0];
-    
+
     // Remove the pattern prefix from the file path to get the relative path
     let relativePath = filePath;
     if (beforeGlob && filePath.startsWith(beforeGlob)) {
       relativePath = filePath.substring(beforeGlob.length);
       // Remove leading slash if present
-      if (relativePath.startsWith('/')) {
+      if (relativePath.startsWith("/")) {
         relativePath = relativePath.substring(1);
       }
     }
-    
+
     // If no relative path remains, use just the filename
     if (!relativePath) {
       relativePath = basename(filePath);
@@ -113,18 +138,20 @@ export function generatePath(filePath: string, matchedPattern?: MatchedPattern |
     const finalFilename = applyRename(filePath, matchedPattern, options);
     // Always apply path mapping if applyRename returned something different from the original basename
     // OR if there are pathMappings configured (since empty string mappings might return same basename)
-    const hasPathMappings = options?.includes?.[matchedPattern.index]?.pathMappings &&
-                           Object.keys(options.includes[matchedPattern.index].pathMappings!).length > 0;
+    const hasPathMappings =
+      options?.includes?.[matchedPattern.index]?.pathMappings &&
+      Object.keys(options.includes[matchedPattern.index].pathMappings!).length >
+        0;
     if (finalFilename !== basename(filePath) || hasPathMappings) {
       // Check if applyRename returned a full path (contains path separators) or just a filename
-      if (finalFilename.includes('/') || finalFilename.includes('\\')) {
+      if (finalFilename.includes("/") || finalFilename.includes("\\")) {
         // applyRename returned a full relative path - need to extract relative part
         // Remove the pattern prefix to get the relative path within the pattern context
         const beforeGlob = pattern.split(/[*?{]/)[0];
         if (beforeGlob && finalFilename.startsWith(beforeGlob)) {
           relativePath = finalFilename.substring(beforeGlob.length);
           // Remove leading slash if present
-          if (relativePath.startsWith('/')) {
+          if (relativePath.startsWith("/")) {
             relativePath = relativePath.substring(1);
           }
         } else {
@@ -140,7 +167,7 @@ export function generatePath(filePath: string, matchedPattern?: MatchedPattern |
 
     return join(matchedPattern.basePath, relativePath);
   }
-  
+
   // Should not happen since we always use includes
   throw new Error("No matched pattern provided - includes are required");
 }
@@ -169,7 +196,16 @@ export async function syncFile(path: string, content: string) {
  * Default asset patterns for common image and media file types
  * @internal
  */
-const DEFAULT_ASSET_PATTERNS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp'];
+const DEFAULT_ASSET_PATTERNS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".svg",
+  ".webp",
+  ".ico",
+  ".bmp",
+];
 
 /**
  * Resolves the effective asset configuration for an import.
@@ -186,11 +222,14 @@ const DEFAULT_ASSET_PATTERNS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'
  */
 export function resolveAssetConfig(
   options: ImportOptions,
-  filePath: string
+  filePath: string,
 ): { assetsPath: string; assetsBaseUrl: string } | null {
   // Explicit config takes precedence
   if (options.assetsPath && options.assetsBaseUrl) {
-    return { assetsPath: options.assetsPath, assetsBaseUrl: options.assetsBaseUrl };
+    return {
+      assetsPath: options.assetsPath,
+      assetsBaseUrl: options.assetsBaseUrl,
+    };
   }
 
   // If only one is set, that's a misconfiguration — skip
@@ -203,8 +242,8 @@ export function resolveAssetConfig(
   if (includeResult.included && includeResult.matchedPattern) {
     const basePath = includeResult.matchedPattern.basePath;
     return {
-      assetsPath: join(basePath, 'assets'),
-      assetsBaseUrl: './assets',
+      assetsPath: join(basePath, "assets"),
+      assetsBaseUrl: "./assets",
     };
   }
 
@@ -218,31 +257,36 @@ export function resolveAssetConfig(
  * @returns Object with include status and matched pattern, or null if not included
  * @internal
  */
-export function shouldIncludeFile(filePath: string, options: ImportOptions): { included: true; matchedPattern: MatchedPattern | null } | { included: false; matchedPattern: null } {
+export function shouldIncludeFile(
+  filePath: string,
+  options: ImportOptions,
+):
+  | { included: true; matchedPattern: MatchedPattern | null }
+  | { included: false; matchedPattern: null } {
   const { includes } = options;
-  
+
   // If no include patterns specified, include all files
   if (!includes || includes.length === 0) {
     return { included: true, matchedPattern: null };
   }
-  
+
   // Check each include pattern to find a match
   for (let i = 0; i < includes.length; i++) {
     const includePattern = includes[i];
     const matcher = picomatch(includePattern.pattern);
-    
+
     if (matcher(filePath)) {
       return {
         included: true,
         matchedPattern: {
           pattern: includePattern.pattern,
           basePath: includePattern.basePath,
-          index: i
-        }
+          index: i,
+        },
       };
     }
   }
-  
+
   // No patterns matched
   return { included: false, matchedPattern: null };
 }
@@ -254,37 +298,48 @@ export function shouldIncludeFile(filePath: string, options: ImportOptions): { i
  * @returns Array of detected asset paths
  * @internal
  */
-export function detectAssets(content: string, assetPatterns: string[] = DEFAULT_ASSET_PATTERNS): string[] {
+export function detectAssets(
+  content: string,
+  assetPatterns: string[] = DEFAULT_ASSET_PATTERNS,
+): string[] {
   const assets: string[] = [];
-  const patterns = assetPatterns.map(ext => ext.toLowerCase());
-  
+  const patterns = assetPatterns.map((ext) => ext.toLowerCase());
+
   // Match markdown images: ![alt](path)
   const imageRegex = /!\[[^\]]*\]\(([^)]+)\)/g;
   let match;
-  
+
   while ((match = imageRegex.exec(content)) !== null) {
     const assetPath = match[1];
     // Only include relative paths and assets matching our patterns
-    if (assetPath.startsWith('./') || assetPath.startsWith('../') || !assetPath.includes('://')) {
+    if (
+      assetPath.startsWith("./") ||
+      assetPath.startsWith("../") ||
+      !assetPath.includes("://")
+    ) {
       const ext = extname(assetPath).toLowerCase();
       if (patterns.includes(ext)) {
         assets.push(assetPath);
       }
     }
   }
-  
+
   // Match HTML img tags: <img src="path">
   const htmlImgRegex = /<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi;
   while ((match = htmlImgRegex.exec(content)) !== null) {
     const assetPath = match[1];
-    if (assetPath.startsWith('./') || assetPath.startsWith('../') || !assetPath.includes('://')) {
+    if (
+      assetPath.startsWith("./") ||
+      assetPath.startsWith("../") ||
+      !assetPath.includes("://")
+    ) {
       const ext = extname(assetPath).toLowerCase();
       if (patterns.includes(ext)) {
         assets.push(assetPath);
       }
     }
   }
-  
+
   return [...new Set(assets)]; // Remove duplicates
 }
 
@@ -292,7 +347,7 @@ export function detectAssets(content: string, assetPatterns: string[] = DEFAULT_
  * Downloads an asset from GitHub and saves it locally
  * @param octokit - GitHub API client
  * @param owner - Repository owner
- * @param repo - Repository name  
+ * @param repo - Repository name
  * @param ref - Git reference
  * @param assetPath - Path to the asset in the repository
  * @param localPath - Local path where the asset should be saved
@@ -301,13 +356,13 @@ export function detectAssets(content: string, assetPatterns: string[] = DEFAULT_
  * @internal
  */
 export async function downloadAsset(
-  octokit: any,
+  octokit: Octokit,
   owner: string,
   repo: string,
   ref: string,
   assetPath: string,
   localPath: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<void> {
   try {
     const { data } = await octokit.rest.repos.getContent({
@@ -318,13 +373,20 @@ export async function downloadAsset(
       request: { signal },
     });
 
-    if (Array.isArray(data) || data.type !== 'file' || !data.download_url) {
-      throw new Error(`Asset ${assetPath} is not a valid file (type: ${data.type}, downloadUrl: ${data.download_url})`);
+    if (Array.isArray(data)) {
+      throw new Error(`Asset ${assetPath} is a directory, not a file`);
+    }
+    if (data.type !== "file" || !data.download_url) {
+      throw new Error(
+        `Asset ${assetPath} is not a valid file (type: ${data.type}, downloadUrl: ${data.download_url})`,
+      );
     }
 
     const response = await fetch(data.download_url, { signal });
     if (!response.ok) {
-      throw new Error(`Failed to download asset: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Failed to download asset: ${response.status} ${response.statusText}`,
+      );
     }
 
     const buffer = await response.arrayBuffer();
@@ -335,8 +397,13 @@ export async function downloadAsset(
     }
 
     await fs.writeFile(localPath, new Uint8Array(buffer));
-  } catch (error: any) {
-    if (error.status === 404) {
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "status" in error &&
+      (error as { status: number }).status === 404
+    ) {
       throw new Error(`Asset not found: ${assetPath}`);
     }
     throw error;
@@ -350,19 +417,34 @@ export async function downloadAsset(
  * @returns Transformed content with updated asset references
  * @internal
  */
-export function transformAssetReferences(content: string, assetMap: Map<string, string>): string {
+export function transformAssetReferences(
+  content: string,
+  assetMap: Map<string, string>,
+): string {
   let transformedContent = content;
-  
+
   for (const [originalPath, newPath] of assetMap) {
     // Transform markdown images
-    const imageRegex = new RegExp(`(!)\\[([^\\]]*)\\]\\(\\s*${escapeRegExp(originalPath)}\\s*\\)`, 'g');
-    transformedContent = transformedContent.replace(imageRegex, `$1[$2](${newPath})`);
-    
+    const imageRegex = new RegExp(
+      `(!)\\[([^\\]]*)\\]\\(\\s*${escapeRegExp(originalPath)}\\s*\\)`,
+      "g",
+    );
+    transformedContent = transformedContent.replace(
+      imageRegex,
+      `$1[$2](${newPath})`,
+    );
+
     // Transform HTML img tags
-    const htmlRegex = new RegExp(`(<img[^>]+src\\s*=\\s*["'])${escapeRegExp(originalPath)}(["'][^>]*>)`, 'gi');
-    transformedContent = transformedContent.replace(htmlRegex, `$1${newPath}$2`);
+    const htmlRegex = new RegExp(
+      `(<img[^>]+src\\s*=\\s*["'])${escapeRegExp(originalPath)}(["'][^>]*>)`,
+      "gi",
+    );
+    transformedContent = transformedContent.replace(
+      htmlRegex,
+      `$1${newPath}$2`,
+    );
   }
-  
+
   return transformedContent;
 }
 
@@ -371,7 +453,7 @@ export function transformAssetReferences(content: string, assetMap: Map<string, 
  * @internal
  */
 function escapeRegExp(string: string): string {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -387,18 +469,31 @@ async function processAssets(
   content: string,
   filePath: string,
   options: ImportOptions,
-  octokit: any,
+  octokit: Octokit,
   logger: Logger,
-  signal?: AbortSignal
-): Promise<{ content: string; assetsDownloaded: number; assetsCached: number }> {
-  const { owner, repo, ref = 'main', assetsPath, assetsBaseUrl, assetPatterns } = options;
+  signal?: AbortSignal,
+): Promise<{
+  content: string;
+  assetsDownloaded: number;
+  assetsCached: number;
+}> {
+  const {
+    owner,
+    repo,
+    ref = "main",
+    assetsPath,
+    assetsBaseUrl,
+    assetPatterns,
+  } = options;
 
   logger.verbose(`🖼️  Processing assets for ${filePath}`);
   logger.debug(`    assetsPath: ${assetsPath}`);
   logger.debug(`    assetsBaseUrl: ${assetsBaseUrl}`);
 
   if (!assetsPath || !assetsBaseUrl) {
-    logger.verbose(`    ⏭️  Skipping asset processing - missing assetsPath or assetsBaseUrl`);
+    logger.verbose(
+      `    ⏭️  Skipping asset processing - missing assetsPath or assetsBaseUrl`,
+    );
     return { content, assetsDownloaded: 0, assetsCached: 0 };
   }
 
@@ -406,7 +501,7 @@ async function processAssets(
   const detectedAssets = detectAssets(content, assetPatterns);
   logger.verbose(`    📸 Detected ${detectedAssets.length} assets`);
   if (detectedAssets.length > 0) {
-    logger.debug(`    Assets: ${detectedAssets.join(', ')}`);
+    logger.debug(`    Assets: ${detectedAssets.join(", ")}`);
   }
 
   if (detectedAssets.length === 0) {
@@ -418,45 +513,64 @@ async function processAssets(
   let assetsCached = 0;
 
   // Process each detected asset
-  await Promise.all(detectedAssets.map(async (assetPath) => {
-    logger.logAssetProcessing("Processing", assetPath);
-    try {
-      // Resolve the asset path relative to the current markdown file
-      const resolvedAssetPath = resolveAssetPath(filePath, assetPath);
-      logger.debug(`    🔗 Resolved path: ${resolvedAssetPath}`);
+  await Promise.all(
+    detectedAssets.map(async (assetPath) => {
+      logger.logAssetProcessing("Processing", assetPath);
+      try {
+        // Resolve the asset path relative to the current markdown file
+        const resolvedAssetPath = resolveAssetPath(filePath, assetPath);
+        logger.debug(`    🔗 Resolved path: ${resolvedAssetPath}`);
 
-      // Generate unique filename to avoid conflicts
-      const originalFilename = basename(assetPath);
-      const ext = extname(originalFilename);
-      const nameWithoutExt = basename(originalFilename, ext);
-      const uniqueFilename = `${nameWithoutExt}-${Date.now()}${ext}`;
-      const localPath = join(assetsPath, uniqueFilename);
-      logger.debug(`    💾 Local path: ${localPath}`);
+        // Generate unique filename to avoid conflicts
+        const originalFilename = basename(assetPath);
+        const ext = extname(originalFilename);
+        const nameWithoutExt = basename(originalFilename, ext);
+        const uniqueFilename = `${nameWithoutExt}-${Date.now()}${ext}`;
+        const localPath = join(assetsPath, uniqueFilename);
+        logger.debug(`    💾 Local path: ${localPath}`);
 
-      // Check if asset already exists (simple cache check)
-      if (existsSync(localPath)) {
-        logger.logAssetProcessing("Cached", assetPath);
-        assetsCached++;
-      } else {
-        // Download the asset
-        logger.logAssetProcessing("Downloading", assetPath, `from ${owner}/${repo}@${ref}:${resolvedAssetPath}`);
-        await downloadAsset(octokit, owner, repo, ref, resolvedAssetPath, localPath, signal);
-        logger.logAssetProcessing("Downloaded", assetPath);
-        assetsDownloaded++;
+        // Check if asset already exists (simple cache check)
+        if (existsSync(localPath)) {
+          logger.logAssetProcessing("Cached", assetPath);
+          assetsCached++;
+        } else {
+          // Download the asset
+          logger.logAssetProcessing(
+            "Downloading",
+            assetPath,
+            `from ${owner}/${repo}@${ref}:${resolvedAssetPath}`,
+          );
+          await downloadAsset(
+            octokit,
+            owner,
+            repo,
+            ref,
+            resolvedAssetPath,
+            localPath,
+            signal,
+          );
+          logger.logAssetProcessing("Downloaded", assetPath);
+          assetsDownloaded++;
+        }
+
+        // Generate URL for the transformed reference
+        const assetUrl = `${assetsBaseUrl}/${uniqueFilename}`.replace(
+          /\/+/g,
+          "/",
+        );
+        logger.debug(`    🔄 Transform: ${assetPath} -> ${assetUrl}`);
+
+        // Map the transformation
+        assetMap.set(assetPath, assetUrl);
+      } catch (error) {
+        logger.warn(`    ❌ Failed to process asset ${assetPath}: ${error}`);
       }
+    }),
+  );
 
-      // Generate URL for the transformed reference
-      const assetUrl = `${assetsBaseUrl}/${uniqueFilename}`.replace(/\/+/g, '/');
-      logger.debug(`    🔄 Transform: ${assetPath} -> ${assetUrl}`);
-
-      // Map the transformation
-      assetMap.set(assetPath, assetUrl);
-    } catch (error) {
-      logger.warn(`    ❌ Failed to process asset ${assetPath}: ${error}`);
-    }
-  }));
-
-  logger.verbose(`    🗺️  Processed ${assetMap.size} assets: ${assetsDownloaded} downloaded, ${assetsCached} cached`);
+  logger.verbose(
+    `    🗺️  Processed ${assetMap.size} assets: ${assetsDownloaded} downloaded, ${assetsCached} cached`,
+  );
 
   // Transform the content with new asset references
   const transformedContent = transformAssetReferences(content, assetMap);
@@ -468,220 +582,12 @@ async function processAssets(
  * @internal
  */
 function resolveAssetPath(basePath: string, assetPath: string): string {
-  if (assetPath.startsWith('./')) {
+  if (assetPath.startsWith("./")) {
     return join(dirname(basePath), assetPath.slice(2));
-  } else if (assetPath.startsWith('../')) {
+  } else if (assetPath.startsWith("../")) {
     return join(dirname(basePath), assetPath);
   }
   return assetPath;
-}
-
-/**
- * Synchronizes an entry by fetching its contents, validating its metadata, and storing or rendering it as needed.
- *
- * @param {LoaderContext} context - The loader context containing the required utilities, metadata, and configuration.
- * @param {Object} urls - Object containing URL data.
- * @param {string | URL | null} urls.url - The URL of the entry to fetch. Throws an error if null or invalid.
- * @param {string} urls.editUrl - The URL for editing the entry.
- * @param {RootOptions} options - Configuration settings for processing the entry such as file paths and custom options.
- * @param {any} octokit - GitHub API client for downloading assets.
- * @param {RequestInit} [init] - Optional parameter for customizing the fetch request.
- * @return {Promise<void>} Resolves when the entry has been successfully processed and stored. Throws errors if invalid URL, missing configuration, or other issues occur.
- * @internal
- */
-export async function syncEntry(
-  context: LoaderContext,
-  { url, editUrl }: { url: string | URL | null; editUrl: string },
-  filePath: string,
-  options: ImportOptions,
-  octokit: any,
-  init: RequestInit = {},
-) {
-  // Exit on null or if the URL is invalid
-  if (url === null || (typeof url !== "string" && !(url instanceof URL))) {
-    throw new TypeError(INVALID_URL_ERROR);
-  }
-  // Validate URL
-  if (typeof url === "string") url = new URL(url);
-
-  const { meta, store, generateDigest, entryTypes, logger, parseData, config } =
-    context;
-
-  function configForFile(file: string) {
-    const ext = file.split(".").at(-1);
-    if (!ext) {
-      logger.warn(`No extension found for ${file}`);
-      return;
-    }
-    return entryTypes?.get(`.${ext}`);
-  }
-  // Custom ID, TODO: Allow custom id generators
-  let id = generateId(filePath);
-
-  init.headers = getHeaders({
-    init: init.headers,
-    meta,
-    id,
-  });
-
-  let res = await fetch(url, init);
-
-  if (res.status === 304) {
-    // Only skip if the local file actually exists
-    const includeResult = shouldIncludeFile(filePath, options);
-    const relativePath = generatePath(filePath, includeResult.included ? includeResult.matchedPattern : null, options);
-    const fileUrl = pathToFileURL(relativePath);
-    
-    if (existsSync(fileURLToPath(fileUrl))) {
-      logger.info(`Skipping ${id} as it has not changed`);
-      return;
-    } else {
-      logger.info(`File ${id} missing locally, re-fetching despite 304`);
-      // File is missing locally, fetch without ETag headers
-      const freshInit = { ...init };
-      freshInit.headers = new Headers(init.headers);
-      freshInit.headers.delete('If-None-Match');
-      freshInit.headers.delete('If-Modified-Since');
-      
-      res = await fetch(url, freshInit);
-      if (!res.ok) throw new Error(res.statusText);
-    }
-  }
-  if (!res.ok) throw new Error(res.statusText);
-  let contents = await res.text();
-  const entryType = configForFile(filePath || "tmp.md");
-  if (!entryType) throw new Error("No entry type found");
-
-  // Process assets FIRST if configuration is provided (or co-located defaults apply)
-  // This ensures asset detection works with original markdown links before they get transformed
-  const syncEntryAssetConfig = resolveAssetConfig(options, filePath);
-  if (syncEntryAssetConfig) {
-    try {
-      // Create a dummy logger for syncEntry since it uses Astro's logger
-      const dummyLogger = {
-        verbose: (msg: string) => logger.info(msg),
-        debug: (msg: string) => logger.debug(msg),
-        warn: (msg: string) => logger.warn(msg),
-        logAssetProcessing: (action: string, path: string, details?: string) => {
-          const msg = details ? `Asset ${action}: ${path} - ${details}` : `Asset ${action}: ${path}`;
-          logger.info(msg);
-        }
-      };
-      const optionsWithAssets = { ...options, ...syncEntryAssetConfig };
-      const assetResult = await processAssets(contents, filePath, optionsWithAssets, octokit, dummyLogger as Logger, init.signal || undefined);
-      contents = assetResult.content;
-    } catch (error: any) {
-      logger.warn(`Asset processing failed for ${id}: ${error.message}`);
-    }
-  }
-
-  // Apply content transforms if provided - both global and pattern-specific
-  // This runs after asset processing so transforms work with processed content
-  const includeResultForTransforms = shouldIncludeFile(filePath, options);
-  const transformsToApply: any[] = [];
-
-  // Add global transforms first
-  if (options.transforms && options.transforms.length > 0) {
-    transformsToApply.push(...options.transforms);
-  }
-
-  // Add pattern-specific transforms
-  if (includeResultForTransforms.included && includeResultForTransforms.matchedPattern && options.includes) {
-    const matchedInclude = options.includes[includeResultForTransforms.matchedPattern.index];
-    if (matchedInclude.transforms && matchedInclude.transforms.length > 0) {
-      transformsToApply.push(...matchedInclude.transforms);
-    }
-  }
-
-  if (transformsToApply.length > 0) {
-    const transformContext = {
-      id,
-      path: filePath,
-      options,
-      matchedPattern: includeResultForTransforms.included ? includeResultForTransforms.matchedPattern : undefined,
-    };
-
-    for (const transform of transformsToApply) {
-      try {
-        contents = transform(contents, transformContext);
-      } catch (error) {
-        logger.warn(`Transform failed for ${id}: ${error}`);
-      }
-    }
-  }
-
-  const includeResult = shouldIncludeFile(filePath, options);
-  const relativePath = generatePath(filePath, includeResult.included ? includeResult.matchedPattern : null, options);
-  const fileUrl = pathToFileURL(relativePath);
-  const { body, data } = await entryType.getEntryInfo({
-    contents,
-    fileUrl: fileUrl,
-  });
-
-  const existingEntry = store.get(id);
-
-  const digest = generateDigest(contents);
-
-  if (
-    existingEntry &&
-    existingEntry.digest === digest &&
-    existingEntry.filePath
-  ) {
-    return;
-  }
-  // Write file to path
-  if (!existsSync(fileURLToPath(fileUrl))) {
-    (logger as any).verbose(`Writing ${id} to ${fileUrl}`);
-    await syncFile(fileURLToPath(fileUrl), contents);
-  }
-
-  const parsedData = await parseData({
-    id,
-    data,
-    filePath: fileUrl.toString(),
-  });
-
-  if (entryType.getRenderFunction) {
-    (logger as any).verbose(`Rendering ${id}`);
-    const render = await entryType.getRenderFunction(config);
-    let rendered: RenderedContent | undefined = undefined;
-    try {
-      rendered = await render?.({
-        id,
-        data,
-        body,
-        filePath: fileUrl.toString(),
-        digest,
-      });
-    } catch (error: any) {
-      logger.error(`Error rendering ${id}: ${error.message}`);
-    }
-    store.set({
-      id,
-      data: parsedData,
-      body,
-      filePath: relativePath,
-      digest,
-      rendered,
-    });
-  } else if ("contentModuleTypes" in entryType) {
-    store.set({
-      id,
-      data: parsedData,
-      body,
-      filePath: relativePath,
-      digest,
-      deferredRender: true,
-    });
-  } else {
-    store.set({ id, data: parsedData, body, filePath: relativePath, digest });
-  }
-
-  syncHeaders({
-    headers: res.headers,
-    meta,
-    id,
-  });
 }
 
 /**
@@ -702,8 +608,7 @@ export async function toCollectionEntry({
   if (typeof repo !== "string" || typeof owner !== "string")
     throw new TypeError(INVALID_STRING_ERROR);
 
-  // Get logger from context - it should be our Logger instance (initialize early)
-  const logger = context.logger as unknown as Logger;
+  const logger = context.logger;
 
   /**
    * OPTIMIZATION: Use Git Trees API for efficient file discovery
@@ -735,7 +640,7 @@ export async function toCollectionEntry({
     repo,
     sha: ref,
     per_page: 1,
-    request: { signal }
+    request: { signal },
   });
 
   if (commits.length === 0) {
@@ -753,19 +658,23 @@ export async function toCollectionEntry({
     repo,
     tree_sha: treeSha,
     recursive: "true",
-    request: { signal }
+    request: { signal },
   });
 
   logger.debug(`Retrieved ${treeData.tree.length} items from repository tree`);
 
   // Filter tree to only include files (not dirs/submodules) that match our patterns
-  const fileEntries = treeData.tree.filter((item: any) => {
-    if (item.type !== 'blob') return false; // Only process files (blobs)
-    const includeCheck = shouldIncludeFile(item.path, options);
-    return includeCheck.included;
-  });
+  const fileEntries = treeData.tree.filter(
+    (item: { type?: string; path?: string }) => {
+      if (item.type !== "blob") return false; // Only process files (blobs)
+      const includeCheck = shouldIncludeFile(item.path!, options);
+      return includeCheck.included;
+    },
+  );
 
-  logger.info(`Found ${fileEntries.length} files matching include patterns (filtered from ${treeData.tree.length} total items)`);
+  logger.info(
+    `Found ${fileEntries.length} files matching include patterns (filtered from ${treeData.tree.length} total items)`,
+  );
 
   // Collect all files first (with content transforms applied)
   const allFiles: ImportedFile[] = [];
@@ -774,11 +683,11 @@ export async function toCollectionEntry({
     const filePath = treeItem.path;
     // Construct the download URL (raw.githubusercontent.com format)
     const downloadUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${commitSha}/${filePath}`;
-    const editUrl = treeItem.url || ''; // Git blob URL (use empty string as fallback)
+    const editUrl = treeItem.url || ""; // Git blob URL (use empty string as fallback)
 
     const fileData = await collectFileData(
       { url: downloadUrl, editUrl },
-      filePath
+      filePath,
     );
 
     if (fileData) {
@@ -802,16 +711,21 @@ export async function toCollectionEntry({
 
     // Generate automatic link mappings from pathMappings
     const autoGeneratedMappings = options.includes
-      ? generateAutoLinkMappings(options.includes, options.linkTransform.stripPrefixes)
+      ? generateAutoLinkMappings(
+          options.includes,
+          options.linkTransform.stripPrefixes,
+        )
       : [];
 
     // Combine auto-generated mappings with user-defined mappings
     const allLinkMappings = [
       ...autoGeneratedMappings,
-      ...(options.linkTransform.linkMappings || [])
+      ...(options.linkTransform.linkMappings || []),
     ];
 
-    logger.debug(`Generated ${autoGeneratedMappings.length} automatic link mappings from pathMappings`);
+    logger.debug(
+      `Generated ${autoGeneratedMappings.length} automatic link mappings from pathMappings`,
+    );
 
     processedFiles = globalLinkTransform(allFiles, {
       stripPrefixes: options.linkTransform.stripPrefixes,
@@ -838,7 +752,7 @@ export async function toCollectionEntry({
   // Helper function to collect file data with content transforms applied
   async function collectFileData(
     { url, editUrl }: { url: string | null; editUrl: string },
-    filePath: string
+    filePath: string,
   ): Promise<ImportedFile | null> {
     if (url === null || typeof url !== "string") {
       return null;
@@ -848,19 +762,22 @@ export async function toCollectionEntry({
 
     // Determine if file needs renaming and generate appropriate ID
     const includeCheck = shouldIncludeFile(filePath, options);
-    const matchedPattern = includeCheck.included ? includeCheck.matchedPattern : null;
+    const matchedPattern = includeCheck.included
+      ? includeCheck.matchedPattern
+      : null;
 
     // Check if this file has a path mapping
-    const hasPathMapping = matchedPattern &&
+    const hasPathMapping =
+      matchedPattern &&
       options?.includes &&
       matchedPattern.index < options.includes.length &&
       options.includes[matchedPattern.index].pathMappings &&
       options.includes[matchedPattern.index].pathMappings![filePath];
 
     // Generate ID based on appropriate path
-    const id = hasPathMapping ?
-      generateId(generatePath(filePath, matchedPattern, options)) : // Use path-mapped path for ID
-      generateId(filePath); // Use original path for ID
+    const id = hasPathMapping
+      ? generateId(generatePath(filePath, matchedPattern, options)) // Use path-mapped path for ID
+      : generateId(filePath); // Use original path for ID
 
     const finalPath = generatePath(filePath, matchedPattern, options);
     let contents: string;
@@ -868,7 +785,10 @@ export async function toCollectionEntry({
     logger.logFileProcessing("Fetching", filePath, `from ${urlObj.toString()}`);
 
     // Download file content
-    const init = { signal, headers: getHeaders({ init: {}, meta: context.meta, id }) };
+    const init = {
+      signal,
+      headers: getHeaders({ init: {}, meta: context.meta, id }),
+    };
     let res: Response | null = null;
 
     // Fetch with retries (simplified version of syncEntry logic)
@@ -878,7 +798,9 @@ export async function toCollectionEntry({
         if (res.ok) break;
       } catch (error) {
         if (attempt === 2) throw error;
-        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1000 * (attempt + 1)),
+        );
       }
     }
 
@@ -889,29 +811,41 @@ export async function toCollectionEntry({
     if (res.status === 304) {
       // File not modified, read existing content from disk if it exists
       const includeResult = shouldIncludeFile(filePath, options);
-      const relativePath = generatePath(filePath, includeResult.included ? includeResult.matchedPattern : null, options);
+      const relativePath = generatePath(
+        filePath,
+        includeResult.included ? includeResult.matchedPattern : null,
+        options,
+      );
       const fileUrl = pathToFileURL(relativePath);
 
       if (existsSync(fileURLToPath(fileUrl))) {
         logger.logFileProcessing("Using cached", filePath, "304 not modified");
-        const { promises: fs } = await import('node:fs');
-        contents = await fs.readFile(fileURLToPath(fileUrl), 'utf-8');
+        const { promises: fs } = await import("node:fs");
+        contents = await fs.readFile(fileURLToPath(fileUrl), "utf-8");
       } else {
         // File is missing locally, re-fetch without cache headers
-        logger.logFileProcessing("Re-fetching", filePath, "missing locally despite 304");
+        logger.logFileProcessing(
+          "Re-fetching",
+          filePath,
+          "missing locally despite 304",
+        );
         const freshInit = { ...init };
         freshInit.headers = new Headers(init.headers);
-        freshInit.headers.delete('If-None-Match');
-        freshInit.headers.delete('If-Modified-Since');
+        freshInit.headers.delete("If-None-Match");
+        freshInit.headers.delete("If-Modified-Since");
 
         res = await fetch(urlObj, freshInit);
         if (!res.ok) {
-          throw new Error(`Failed to fetch file content from ${urlObj.toString()}: ${res.status} ${res.statusText || 'Unknown error'}`);
+          throw new Error(
+            `Failed to fetch file content from ${urlObj.toString()}: ${res.status} ${res.statusText || "Unknown error"}`,
+          );
         }
         contents = await res.text();
       }
     } else if (!res.ok) {
-      throw new Error(`Failed to fetch file content from ${urlObj.toString()}: ${res.status} ${res.statusText || 'Unknown error'}`);
+      throw new Error(
+        `Failed to fetch file content from ${urlObj.toString()}: ${res.status} ${res.statusText || "Unknown error"}`,
+      );
     } else {
       contents = await res.text();
     }
@@ -923,18 +857,27 @@ export async function toCollectionEntry({
     if (resolvedAssetConfig) {
       try {
         const optionsWithAssets = { ...options, ...resolvedAssetConfig };
-        const assetResult = await processAssets(contents, filePath, optionsWithAssets, octokit, logger, signal);
+        const assetResult = await processAssets(
+          contents,
+          filePath,
+          optionsWithAssets,
+          octokit,
+          logger,
+          signal,
+        );
         contents = assetResult.content;
         fileAssetsDownloaded = assetResult.assetsDownloaded;
         fileAssetsCached = assetResult.assetsCached;
       } catch (error) {
-        logger.warn(`Asset processing failed for ${id}: ${error instanceof Error ? error.message : String(error)}`);
+        logger.warn(
+          `Asset processing failed for ${id}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
     // Apply content transforms
     const includeResult = shouldIncludeFile(filePath, options);
-    const transformsToApply: any[] = [];
+    const transformsToApply: TransformFunction[] = [];
 
     // Add global transforms first
     if (options.transforms && options.transforms.length > 0) {
@@ -942,8 +885,13 @@ export async function toCollectionEntry({
     }
 
     // Add pattern-specific transforms
-    if (includeResult.included && includeResult.matchedPattern && options.includes) {
-      const matchedInclude = options.includes[includeResult.matchedPattern.index];
+    if (
+      includeResult.included &&
+      includeResult.matchedPattern &&
+      options.includes
+    ) {
+      const matchedInclude =
+        options.includes[includeResult.matchedPattern.index];
       if (matchedInclude.transforms && matchedInclude.transforms.length > 0) {
         transformsToApply.push(...matchedInclude.transforms);
       }
@@ -954,7 +902,10 @@ export async function toCollectionEntry({
         id,
         path: filePath,
         options,
-        matchedPattern: includeResult.included ? includeResult.matchedPattern : undefined,
+        matchedPattern:
+          includeResult.included && includeResult.matchedPattern
+            ? includeResult.matchedPattern
+            : undefined,
       };
 
       for (const transform of transformsToApply) {
@@ -967,13 +918,18 @@ export async function toCollectionEntry({
     }
 
     // Build link context for this file
-    const linkContext = includeResult.included && includeResult.matchedPattern ? {
-      sourcePath: filePath,
-      targetPath: finalPath,
-      basePath: includeResult.matchedPattern.basePath,
-      pathMappings: options.includes?.[includeResult.matchedPattern.index]?.pathMappings,
-      matchedPattern: includeResult.matchedPattern,
-    } : undefined;
+    const linkContext =
+      includeResult.included && includeResult.matchedPattern
+        ? {
+            sourcePath: filePath,
+            targetPath: finalPath,
+            basePath: includeResult.matchedPattern.basePath,
+            pathMappings:
+              options.includes?.[includeResult.matchedPattern.index]
+                ?.pathMappings,
+            matchedPattern: includeResult.matchedPattern,
+          }
+        : undefined;
 
     // Use the finalPath we already computed
     return {
@@ -988,10 +944,11 @@ export async function toCollectionEntry({
   // Helper function to store a processed file
   async function storeProcessedFile(
     file: ImportedFile,
-    context: any,
-    clear: boolean
-  ): Promise<any> {
-    const { store, generateDigest, entryTypes, logger, parseData, config } = context;
+    context: ExtendedLoaderContext,
+    clear: boolean,
+  ) {
+    const { store, generateDigest, entryTypes, logger, parseData, config } =
+      context;
 
     function configForFile(filePath: string) {
       const ext = filePath.split(".").at(-1);
@@ -1054,10 +1011,14 @@ export async function toCollectionEntry({
           filePath: fileUrl.toString(),
           digest,
         });
-      } catch (error: any) {
-        logger.error(`Error rendering ${file.id}: ${error.message}`);
+      } catch (error: unknown) {
+        logger.error(
+          `Error rendering ${file.id}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
-      logger.debug(`🔍 Storing collection entry: ${file.id} (${file.sourcePath} -> ${file.targetPath})`);
+      logger.debug(
+        `🔍 Storing collection entry: ${file.id} (${file.sourcePath} -> ${file.targetPath})`,
+      );
       store.set({
         id: file.id,
         data: parsedData,
@@ -1081,82 +1042,13 @@ export async function toCollectionEntry({
         data: parsedData,
         body,
         filePath: file.targetPath,
-        digest
+        digest,
       });
     }
 
     return { id: file.id, filePath: file.targetPath };
   }
-
-  async function processDirectoryRecursively(path: string): Promise<any> {
-    // Fetch the content
-    const { data, status } = await octokit.rest.repos.getContent({
-      owner,
-      repo,
-      path,
-      ref,
-      request: { signal },
-    });
-    if (status !== 200) throw new Error(INVALID_SERVICE_RESPONSE);
-
-    // Matches for regular files
-    if (!Array.isArray(data)) {
-      const filePath = data.path;
-      switch (data.type) {
-        // Return
-        case "file":
-          return await syncEntry(
-            context,
-            { url: data.download_url, editUrl: data.url },
-            filePath,
-            options,
-            octokit,
-            { signal },
-          );
-        default:
-          throw new Error("Invalid type");
-      }
-    }
-
-    // Directory listing with filtering - process sequentially
-    const filteredEntries = data
-      .filter(({ type, path }) => {
-        // Always include directories for recursion
-        if (type === "dir") return true;
-        // Apply filtering logic to files
-        if (type === "file") {
-          return shouldIncludeFile(path, options).included;
-        }
-        return false;
-      });
-    
-    const results = [];
-    for (const { type, path, download_url, url } of filteredEntries) {
-      switch (type) {
-        // Recurse
-        case "dir":
-          results.push(await processDirectoryRecursively(path));
-          break;
-        // Return
-        case "file":
-          results.push(await syncEntry(
-            context,
-            { url: download_url, editUrl: url },
-            path,
-            options,
-            octokit,
-            { signal },
-          ));
-          break;
-        default:
-          throw new Error("Invalid type");
-      }
-    }
-    return results;
-  } // End of processDirectoryRecursively function
 }
-
-
 
 /**
  * Get the headers needed to make a conditional request.
@@ -1164,14 +1056,14 @@ export async function toCollectionEntry({
  * @internal
  */
 export function getHeaders({
-                                        init,
-                                        meta,
-                                        id,
-                                      }: {
+  init,
+  meta,
+  id,
+}: {
   /** Initial headers to include */
   init?: RequestInit["headers"];
   /** Meta store to get etag and last-modified values from */
-  meta: LoaderContext["meta"];
+  meta: ExtendedLoaderContext["meta"];
   id: string;
 }): Headers {
   const tag = `${id}-etag`;
@@ -1193,14 +1085,14 @@ export function getHeaders({
  * @internal
  */
 export function syncHeaders({
-                                          headers,
-                                          meta,
-                                          id,
-                                        }: {
+  headers,
+  meta,
+  id,
+}: {
   /** Headers from the response */
   headers: Headers;
   /** Meta store to store etag and last-modified values in */
-  meta: LoaderContext["meta"];
+  meta: ExtendedLoaderContext["meta"];
   /** id string */
   id: string;
 }) {

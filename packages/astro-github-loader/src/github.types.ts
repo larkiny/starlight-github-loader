@@ -3,12 +3,12 @@ import type {
   LoaderContext as AstroLoaderContext,
 } from "astro/loaders";
 import type { ContentEntryType } from "astro";
-import type {MarkdownHeading} from "@astrojs/markdown-remark";
-import {Octokit} from "octokit";
+import type { MarkdownHeading } from "@astrojs/markdown-remark";
+import { Octokit } from "octokit";
 
 // Import link transformation types from the dedicated module
 import type { LinkHandler } from "./github.link-transform.js";
-import type { LogLevel } from "./github.logger.js";
+import type { LogLevel, Logger } from "./github.logger.js";
 
 /**
  * Context information for link transformations
@@ -33,7 +33,13 @@ export interface LinkMapping {
   /** Pattern to match (string or regex) */
   pattern: string | RegExp;
   /** Replacement string or function */
-  replacement: string | ((match: string, anchor: string, context: any) => string);
+  replacement:
+    | string
+    | ((
+        match: string,
+        anchor: string,
+        context: LinkTransformContext,
+      ) => string);
   /** Apply to all links, not just unresolved internal links (default: false) */
   global?: boolean;
   /** Function to determine if this mapping should apply to the current file context */
@@ -86,7 +92,10 @@ export interface TransformContext {
  * @param context - Context information about the file being processed
  * @returns The transformed content
  */
-export type TransformFunction = (content: string, context: TransformContext) => string;
+export type TransformFunction = (
+  content: string,
+  context: TransformContext,
+) => string;
 
 /**
  * Enhanced path mapping configuration that supports cross-section linking
@@ -139,7 +148,6 @@ export interface IncludePattern {
   pathMappings?: Record<string, PathMappingValue>;
 }
 
-
 export type GithubLoaderOptions = {
   octokit: Octokit;
   configs: Array<ImportOptions>;
@@ -179,7 +187,7 @@ export type CollectionEntryOptions = {
    * The LoaderContext may contain properties and methods that offer
    * control or inspection over the loading behavior.
    */
-  context: LoaderContext;
+  context: ExtendedLoaderContext;
   /**
    * An instance of the Octokit library, which provides a way to interact
    * with GitHub's REST API. This variable allows you to access and perform
@@ -343,13 +351,21 @@ export interface LoaderContext extends AstroLoaderContext {
 }
 
 /**
+ * LoaderContext with Astro's logger replaced by our Logger class.
+ * Used by internal functions that need verbose/logFileProcessing/etc.
+ * @internal
+ */
+export type ExtendedLoaderContext = Omit<LoaderContext, "logger"> & {
+  logger: Logger;
+};
+
+/**
  * @internal
  */
 export interface Loader extends AstroLoader {
   /** Do the actual loading of the data */
   load: (context: LoaderContext) => Promise<void>;
 }
-
 
 /**
  * Statistics for a sync operation

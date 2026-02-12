@@ -1,7 +1,11 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { toCollectionEntry, resolveAssetConfig } from "./github.content.js";
 import type { ImportOptions, VersionConfig } from "./github.types.js";
-import { createMockContext, createMockOctokit, mockFetch } from "./test-helpers.js";
+import {
+  createMockContext,
+  createMockOctokit,
+  mockFetch,
+} from "./test-helpers.js";
 
 describe("Git Trees API Optimization", () => {
   beforeEach(() => {
@@ -19,10 +23,12 @@ describe("Git Trees API Optimization", () => {
         owner: "algorandfoundation",
         repo: "algokit-cli",
         ref: "chore/content-fix",
-        includes: [{
-          pattern: "docs/{features/**/*.md,algokit.md}",
-          basePath: "test-output",
-        }],
+        includes: [
+          {
+            pattern: "docs/{features/**/*.md,algokit.md}",
+            basePath: "test-output",
+          },
+        ],
       };
 
       await toCollectionEntry({
@@ -38,7 +44,7 @@ describe("Git Trees API Optimization", () => {
           repo: "algokit-cli",
           sha: "chore/content-fix",
           per_page: 1,
-        })
+        }),
       );
 
       expect(spies.getTreeSpy).toHaveBeenCalledTimes(1);
@@ -48,7 +54,7 @@ describe("Git Trees API Optimization", () => {
           repo: "algokit-cli",
           tree_sha: "tree123abc456",
           recursive: "true",
-        })
+        }),
       );
 
       // getContent should NOT be called (old recursive approach)
@@ -67,10 +73,12 @@ describe("Git Trees API Optimization", () => {
         owner: "algorandfoundation",
         repo: "algokit-cli",
         ref: "chore/content-fix",
-        includes: [{
-          pattern: "docs/{features/**/*.md,algokit.md}",
-          basePath: "test-output",
-        }],
+        includes: [
+          {
+            pattern: "docs/{features/**/*.md,algokit.md}",
+            basePath: "test-output",
+          },
+        ],
       };
 
       const stats = await toCollectionEntry({
@@ -84,10 +92,10 @@ describe("Git Trees API Optimization", () => {
       expect(ctx._store.size).toBe(4);
 
       const storedIds = Array.from(ctx._store.keys());
-      expect(storedIds).toContain('docs/algokit');
-      expect(storedIds.some(id => id.includes('features'))).toBe(true);
-      expect(storedIds).not.toContain('package');
-      expect(storedIds).not.toContain('README');
+      expect(storedIds).toContain("docs/algokit");
+      expect(storedIds.some((id) => id.includes("features"))).toBe(true);
+      expect(storedIds).not.toContain("package");
+      expect(storedIds).not.toContain("README");
     });
 
     it("should filter to match only specific file when pattern is exact", async () => {
@@ -100,10 +108,12 @@ describe("Git Trees API Optimization", () => {
         owner: "test",
         repo: "repo",
         ref: "main",
-        includes: [{
-          pattern: "docs/algokit.md",
-          basePath: "test-output",
-        }],
+        includes: [
+          {
+            pattern: "docs/algokit.md",
+            basePath: "test-output",
+          },
+        ],
       };
 
       const stats = await toCollectionEntry({
@@ -114,7 +124,7 @@ describe("Git Trees API Optimization", () => {
 
       expect(stats.processed).toBe(1);
       expect(ctx._store.size).toBe(1);
-      expect(Array.from(ctx._store.keys())[0]).toContain('algokit');
+      expect(Array.from(ctx._store.keys())[0]).toContain("algokit");
     });
   });
 
@@ -129,10 +139,12 @@ describe("Git Trees API Optimization", () => {
         owner: "algorandfoundation",
         repo: "algokit-cli",
         ref: "chore/content-fix",
-        includes: [{
-          pattern: "docs/algokit.md",
-          basePath: "test-output",
-        }],
+        includes: [
+          {
+            pattern: "docs/algokit.md",
+            basePath: "test-output",
+          },
+        ],
       };
 
       await toCollectionEntry({
@@ -141,14 +153,14 @@ describe("Git Trees API Optimization", () => {
         options: testConfig,
       });
 
-      const rawGithubCalls = fetchMock.mock.calls.filter(call => {
-        const url = call[0]?.toString() || '';
-        return url.includes('raw.githubusercontent.com');
+      const rawGithubCalls = fetchMock.mock.calls.filter((call) => {
+        const url = call[0]?.toString() || "";
+        return url.includes("raw.githubusercontent.com");
       });
 
       expect(rawGithubCalls.length).toBeGreaterThan(0);
       expect(rawGithubCalls[0][0]?.toString()).toMatch(
-        /^https:\/\/raw\.githubusercontent\.com\/algorandfoundation\/algokit-cli\/abc123def456\/docs\/algokit\.md$/
+        /^https:\/\/raw\.githubusercontent\.com\/algorandfoundation\/algokit-cli\/abc123def456\/docs\/algokit\.md$/,
       );
     });
   });
@@ -193,9 +205,11 @@ describe("Git Trees API Optimization", () => {
       expect(stats.processed).toBe(5);
 
       const storedIds = Array.from(ctx._store.keys());
-      expect(storedIds.some(id => id.includes('overview'))).toBe(true);
-      expect(storedIds.filter(id => id.includes('features')).length).toBe(3);
-      expect(storedIds.some(id => id.includes('cli') && id.includes('index'))).toBe(true);
+      expect(storedIds.some((id) => id.includes("overview"))).toBe(true);
+      expect(storedIds.filter((id) => id.includes("features")).length).toBe(3);
+      expect(
+        storedIds.some((id) => id.includes("cli") && id.includes("index")),
+      ).toBe(true);
     });
   });
 
@@ -215,10 +229,12 @@ describe("Git Trees API Optimization", () => {
           { slug: "latest", label: "Latest" },
           { slug: "v8.0.0", label: "v8.0.0" },
         ],
-        includes: [{
-          pattern: "docs/algokit.md",
-          basePath: "test-output",
-        }],
+        includes: [
+          {
+            pattern: "docs/algokit.md",
+            basePath: "test-output",
+          },
+        ],
       };
 
       const stats = await toCollectionEntry({
@@ -245,10 +261,12 @@ describe("Git Trees API Optimization", () => {
         ref: "main",
         language: "Python",
         versions: [{ slug: "latest", label: "Latest" }],
-        includes: [{
-          pattern: "docs/algokit.md",
-          basePath: "test-output",
-        }],
+        includes: [
+          {
+            pattern: "docs/algokit.md",
+            basePath: "test-output",
+          },
+        ],
         transforms: [
           (content, context) => {
             capturedOptions = context.options;
@@ -265,7 +283,9 @@ describe("Git Trees API Optimization", () => {
 
       expect(capturedOptions).toBeDefined();
       expect(capturedOptions!.language).toBe("Python");
-      expect(capturedOptions!.versions).toEqual([{ slug: "latest", label: "Latest" }]);
+      expect(capturedOptions!.versions).toEqual([
+        { slug: "latest", label: "Latest" },
+      ]);
     });
 
     it("should work without language and versions (backward compatible)", async () => {
@@ -278,10 +298,12 @@ describe("Git Trees API Optimization", () => {
         owner: "test",
         repo: "repo",
         ref: "main",
-        includes: [{
-          pattern: "docs/algokit.md",
-          basePath: "test-output",
-        }],
+        includes: [
+          {
+            pattern: "docs/algokit.md",
+            basePath: "test-output",
+          },
+        ],
       };
 
       const stats = await toCollectionEntry({
@@ -302,10 +324,12 @@ describe("resolveAssetConfig", () => {
       repo: "repo",
       assetsPath: "src/assets/custom",
       assetsBaseUrl: "/assets/custom",
-      includes: [{
-        pattern: "docs/**/*.md",
-        basePath: "src/content/docs/lib",
-      }],
+      includes: [
+        {
+          pattern: "docs/**/*.md",
+          basePath: "src/content/docs/lib",
+        },
+      ],
     };
 
     const result = resolveAssetConfig(options, "docs/guide.md");
@@ -320,10 +344,12 @@ describe("resolveAssetConfig", () => {
     const options: ImportOptions = {
       owner: "test",
       repo: "repo",
-      includes: [{
-        pattern: "docs/**/*.md",
-        basePath: "src/content/docs/algokit-utils/typescript/v8.0.0",
-      }],
+      includes: [
+        {
+          pattern: "docs/**/*.md",
+          basePath: "src/content/docs/algokit-utils/typescript/v8.0.0",
+        },
+      ],
     };
 
     const result = resolveAssetConfig(options, "docs/guide.md");
@@ -340,10 +366,12 @@ describe("resolveAssetConfig", () => {
       repo: "repo",
       assetsPath: "src/assets/custom",
       // assetsBaseUrl intentionally omitted
-      includes: [{
-        pattern: "docs/**/*.md",
-        basePath: "src/content/docs/lib",
-      }],
+      includes: [
+        {
+          pattern: "docs/**/*.md",
+          basePath: "src/content/docs/lib",
+        },
+      ],
     };
 
     const result = resolveAssetConfig(options, "docs/guide.md");
@@ -356,10 +384,12 @@ describe("resolveAssetConfig", () => {
       repo: "repo",
       // assetsPath intentionally omitted
       assetsBaseUrl: "/assets/custom",
-      includes: [{
-        pattern: "docs/**/*.md",
-        basePath: "src/content/docs/lib",
-      }],
+      includes: [
+        {
+          pattern: "docs/**/*.md",
+          basePath: "src/content/docs/lib",
+        },
+      ],
     };
 
     const result = resolveAssetConfig(options, "docs/guide.md");
@@ -370,10 +400,12 @@ describe("resolveAssetConfig", () => {
     const options: ImportOptions = {
       owner: "test",
       repo: "repo",
-      includes: [{
-        pattern: "docs/**/*.md",
-        basePath: "src/content/docs/lib",
-      }],
+      includes: [
+        {
+          pattern: "docs/**/*.md",
+          basePath: "src/content/docs/lib",
+        },
+      ],
     };
 
     const result = resolveAssetConfig(options, "src/main.ts");
