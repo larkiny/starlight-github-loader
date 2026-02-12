@@ -78,7 +78,20 @@ export async function loadImportState(
 
   try {
     const content = await fs.readFile(statePath, "utf-8");
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    // Validate the parsed state has the expected shape
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("imports" in parsed) ||
+      typeof parsed.imports !== "object"
+    ) {
+      const msg = `Malformed state file at ${statePath}, starting fresh`;
+      // eslint-disable-next-line no-console -- fallback when no logger provided
+      logger ? logger.warn(msg) : console.warn(msg);
+      return { imports: {}, lastChecked: new Date().toISOString() };
+    }
+    return parsed;
   } catch (error) {
     const msg = `Failed to load import state from ${statePath}, starting fresh: ${error}`;
     // eslint-disable-next-line no-console -- fallback when no logger provided
