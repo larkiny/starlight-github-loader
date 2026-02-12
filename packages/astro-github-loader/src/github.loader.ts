@@ -1,11 +1,24 @@
 import { toCollectionEntry } from "./github.content.js";
 import { performSelectiveCleanup } from "./github.cleanup.js";
-import { performDryRun, displayDryRunResults, updateImportState, loadImportState, createConfigId, getLatestCommitInfo } from "./github.dryrun.js";
-import { createLogger, type Logger, type ImportSummary } from "./github.logger.js";
+import {
+  performDryRun,
+  displayDryRunResults,
+  updateImportState,
+  loadImportState,
+  createConfigId,
+  getLatestCommitInfo,
+} from "./github.dryrun.js";
+import {
+  createLogger,
+  type Logger,
+  type ImportSummary,
+} from "./github.logger.js";
 
+import { Octokit } from "octokit";
 import type {
   Loader,
   GithubLoaderOptions,
+  ExtendedLoaderContext,
   ImportOptions,
   SyncStats,
 } from "./github.types.js";
@@ -13,33 +26,37 @@ import type {
 /**
  * Performs selective cleanup for configurations with basePath
  * @param configs - Array of configuration objects
- * @param context - Loader context  
+ * @param context - Loader context
  * @param octokit - GitHub API client
  * @internal
  */
 async function performSelectiveCleanups(
   configs: ImportOptions[],
-  context: any,
-  octokit: any
+  context: ExtendedLoaderContext,
+  octokit: Octokit,
 ): Promise<SyncStats[]> {
   const results: SyncStats[] = [];
-  
+
   // Process each config sequentially to avoid overwhelming Astro's file watcher
   for (const config of configs) {
     if (config.enabled === false) {
-      context.logger.debug(`Skipping disabled config: ${config.name || `${config.owner}/${config.repo}`}`);
+      context.logger.debug(
+        `Skipping disabled config: ${config.name || `${config.owner}/${config.repo}`}`,
+      );
       continue;
     }
 
     try {
       const stats = await performSelectiveCleanup(config, context, octokit);
       results.push(stats);
-    } catch (error: any) {
-      context.logger.error(`Selective cleanup failed for ${config.name || `${config.owner}/${config.repo}`}: ${error}`);
+    } catch (error: unknown) {
+      context.logger.error(
+        `Selective cleanup failed for ${config.name || `${config.owner}/${config.repo}`}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       // Continue with other configs even if one fails
     }
   }
-  
+
   return results;
 }
 
@@ -67,12 +84,13 @@ export function githubLoader({
   return {
     name: "github-loader",
     load: async (context) => {
-
       // Create global logger with specified level or default
-      const globalLogger = createLogger(logLevel || 'default');
+      const globalLogger = createLogger(logLevel || "default");
 
       if (dryRun) {
-        globalLogger.info("🔍 Dry run mode enabled - checking for changes only");
+        globalLogger.info(
+          "🔍 Dry run mode enabled - checking for changes only",
+        );
 
         try {
           const results = await performDryRun(configs, context, octokit);
@@ -82,8 +100,10 @@ export function githubLoader({
           globalLogger.info("💡 Set dryRun: false to perform actual imports");
 
           return; // Exit without importing
-        } catch (error: any) {
-          globalLogger.error(`Dry run failed: ${error.message}`);
+        } catch (error: unknown) {
+          globalLogger.error(
+            `Dry run failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
           throw error;
         }
       }
@@ -92,28 +112,36 @@ export function githubLoader({
 
       // Log clear mode status - actual clearing happens per-entry in toCollectionEntry
       // to avoid breaking Astro's content collection by emptying the store all at once
-      globalLogger.info(clear ? "Processing with selective entry replacement" : "Processing without entry replacement");
+      globalLogger.info(
+        clear
+          ? "Processing with selective entry replacement"
+          : "Processing without entry replacement",
+      );
 
       // Process each config sequentially to avoid overwhelming GitHub API/CDN
       for (let i = 0; i < configs.length; i++) {
         const config = configs[i];
 
         if (config.enabled === false) {
-          globalLogger.debug(`Skipping disabled config: ${config.name || `${config.owner}/${config.repo}`}`);
+          globalLogger.debug(
+            `Skipping disabled config: ${config.name || `${config.owner}/${config.repo}`}`,
+          );
           continue;
         }
 
         // Add small delay between configs to be gentler on GitHub's CDN
         if (i > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
 
         // Determine the effective log level for this config
-        const effectiveLogLevel = logLevel || config.logLevel || 'default';
+        const effectiveLogLevel = logLevel || config.logLevel || "default";
         const configLogger = createLogger(effectiveLogLevel);
 
-        const langSuffix = config.language ? ` (${config.language})` : '';
-        const configName = config.name ? `${config.name}${langSuffix}` : `${config.owner}/${config.repo}${langSuffix}`;
+        const langSuffix = config.language ? ` (${config.language})` : "";
+        const configName = config.name
+          ? `${config.name}${langSuffix}`
+          : `${config.owner}/${config.repo}${langSuffix}`;
         const repository = `${config.owner}/${config.repo}`;
 
         let summary: ImportSummary = {
@@ -124,7 +152,7 @@ export function githubLoader({
           filesUpdated: 0,
           filesUnchanged: 0,
           duration: 0,
-          status: 'error',
+          status: "error",
         };
 
         const startTime = Date.now();
@@ -135,37 +163,52 @@ export function githubLoader({
 
           if (!force) {
             try {
-              const state = await loadImportState(process.cwd());
+              const state = await loadImportState(process.cwd(), configLogger);
               const currentState = state.imports[configId];
 
               if (currentState && currentState.lastCommitSha) {
-                configLogger.debug(`🔍 Checking repository changes for ${configName}...`);
+                configLogger.debug(
+                  `🔍 Checking repository changes for ${configName}...`,
+                );
                 const latestCommit = await getLatestCommitInfo(octokit, config);
 
-                if (latestCommit && currentState.lastCommitSha === latestCommit.sha) {
-                  configLogger.info(`✅ Repository ${configName} unchanged (${latestCommit.sha.slice(0, 7)}) - skipping import`);
+                if (
+                  latestCommit &&
+                  currentState.lastCommitSha === latestCommit.sha
+                ) {
+                  configLogger.info(
+                    `✅ Repository ${configName} unchanged (${latestCommit.sha.slice(0, 7)}) - skipping import`,
+                  );
 
                   // Update summary for unchanged repository
                   summary.duration = Date.now() - startTime;
                   summary.filesProcessed = 0;
                   summary.filesUpdated = 0;
                   summary.filesUnchanged = 0;
-                  summary.status = 'success';
+                  summary.status = "success";
 
                   configLogger.logImportSummary(summary);
                   continue; // Skip to next config
                 } else if (latestCommit) {
-                  configLogger.info(`🔄 Repository ${configName} changed (${currentState.lastCommitSha?.slice(0, 7) || 'unknown'} -> ${latestCommit.sha.slice(0, 7)}) - proceeding with import`);
+                  configLogger.info(
+                    `🔄 Repository ${configName} changed (${currentState.lastCommitSha?.slice(0, 7) || "unknown"} -> ${latestCommit.sha.slice(0, 7)}) - proceeding with import`,
+                  );
                 }
               } else {
-                configLogger.debug(`📥 First time importing ${configName} - no previous state found`);
+                configLogger.debug(
+                  `📥 First time importing ${configName} - no previous state found`,
+                );
               }
             } catch (error) {
-              configLogger.warn(`Failed to check repository state for ${configName}: ${error instanceof Error ? error.message : String(error)}`);
+              configLogger.warn(
+                `Failed to check repository state for ${configName}: ${error instanceof Error ? error.message : String(error)}`,
+              );
               // Continue with import if state check fails
             }
           } else {
-            configLogger.info(`🔄 Force mode enabled for ${configName} - proceeding with full import`);
+            configLogger.info(
+              `🔄 Force mode enabled for ${configName} - proceeding with full import`,
+            );
           }
 
           // Determine effective clear setting: per-config takes precedence over global
@@ -173,27 +216,39 @@ export function githubLoader({
 
           // Perform selective cleanup before importing if clear is enabled
           if (effectiveClear) {
-            configLogger.info(`🧹 Clearing obsolete files for ${configName}...`);
+            configLogger.info(
+              `🧹 Clearing obsolete files for ${configName}...`,
+            );
             try {
-              await performSelectiveCleanup(config, { ...context, logger: configLogger as any }, octokit);
+              await performSelectiveCleanup(
+                config,
+                { ...context, logger: configLogger } as ExtendedLoaderContext,
+                octokit,
+              );
             } catch (error) {
-              configLogger.warn(`Cleanup failed for ${configName}, continuing with import: ${error}`);
+              configLogger.warn(
+                `Cleanup failed for ${configName}, continuing with import: ${error}`,
+              );
             }
           }
 
           // Perform the import with spinner
           const stats = await globalLogger.withSpinner(
             `🔄 Importing ${configName}...`,
-            () => toCollectionEntry({
-              context: { ...context, logger: configLogger as any },
-              octokit,
-              options: config,
-              fetchOptions,
-              force,
-              clear: effectiveClear,
-            }),
+            () =>
+              toCollectionEntry({
+                context: {
+                  ...context,
+                  logger: configLogger,
+                } as ExtendedLoaderContext,
+                octokit,
+                options: config,
+                fetchOptions,
+                force,
+                clear: effectiveClear,
+              }),
             `✅ ${configName} imported successfully`,
-            `❌ ${configName} import failed`
+            `❌ ${configName} import failed`,
           );
 
           summary.duration = Date.now() - startTime;
@@ -202,7 +257,7 @@ export function githubLoader({
           summary.filesUnchanged = stats?.unchanged || 0;
           summary.assetsDownloaded = stats?.assetsDownloaded || 0;
           summary.assetsCached = stats?.assetsCached || 0;
-          summary.status = 'success';
+          summary.status = "success";
 
           // Log structured summary
           configLogger.logImportSummary(summary);
@@ -213,21 +268,29 @@ export function githubLoader({
             const { data } = await octokit.rest.repos.listCommits({
               owner: config.owner,
               repo: config.repo,
-              sha: config.ref || 'main',
-              per_page: 1
+              sha: config.ref || "main",
+              per_page: 1,
             });
 
             if (data.length > 0) {
-              await updateImportState(process.cwd(), config, data[0].sha);
+              await updateImportState(
+                process.cwd(),
+                config,
+                data[0].sha,
+                configLogger,
+              );
             }
           } catch (error) {
             // Don't fail the import if state tracking fails
-            configLogger.debug(`Failed to update import state for ${configName}: ${error}`);
+            configLogger.debug(
+              `Failed to update import state for ${configName}: ${error}`,
+            );
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           summary.duration = Date.now() - startTime;
-          summary.status = 'error';
-          summary.error = error.message;
+          summary.status = "error";
+          summary.error =
+            error instanceof Error ? error.message : String(error);
 
           configLogger.logImportSummary(summary);
           // Continue with other configs even if one fails

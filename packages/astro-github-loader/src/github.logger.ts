@@ -2,7 +2,7 @@
  * Multi-level logging system for astro-github-loader
  */
 
-export type LogLevel = 'silent' | 'default' | 'verbose' | 'debug';
+export type LogLevel = "silent" | "default" | "verbose" | "debug";
 
 export interface LoggerOptions {
   level: LogLevel;
@@ -19,7 +19,7 @@ export interface ImportSummary {
   assetsDownloaded?: number;
   assetsCached?: number;
   duration: number;
-  status: 'success' | 'error' | 'cancelled';
+  status: "success" | "error" | "cancelled";
   error?: string;
 }
 
@@ -43,13 +43,13 @@ export class Logger {
   private level: LogLevel;
   private prefix: string;
   private spinnerInterval?: NodeJS.Timeout;
-  private spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  private spinnerChars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
   private spinnerIndex = 0;
   private spinnerStartTime?: number;
 
   constructor(options: LoggerOptions) {
     this.level = options.level;
-    this.prefix = options.prefix || '';
+    this.prefix = options.prefix || "";
   }
 
   /**
@@ -98,7 +98,7 @@ export class Logger {
    * Default level - summary information only
    */
   info(message: string): void {
-    if (this.shouldLog('default')) {
+    if (this.shouldLog("default")) {
       console.log(this.formatMessage(message));
     }
   }
@@ -107,7 +107,7 @@ export class Logger {
    * Verbose level - detailed operation information
    */
   verbose(message: string): void {
-    if (this.shouldLog('verbose')) {
+    if (this.shouldLog("verbose")) {
       console.log(this.formatMessage(message));
     }
   }
@@ -116,7 +116,7 @@ export class Logger {
    * Debug level - all information including diagnostics
    */
   debug(message: string): void {
-    if (this.shouldLog('debug')) {
+    if (this.shouldLog("debug")) {
       console.log(this.formatMessage(message));
     }
   }
@@ -125,7 +125,7 @@ export class Logger {
    * Error - always shown unless silent
    */
   error(message: string): void {
-    if (this.shouldLog('default')) {
+    if (this.shouldLog("default")) {
       console.error(this.formatMessage(message));
     }
   }
@@ -134,7 +134,7 @@ export class Logger {
    * Warning - shown at default level and above
    */
   warn(message: string): void {
-    if (this.shouldLog('default')) {
+    if (this.shouldLog("default")) {
       console.warn(this.formatMessage(message));
     }
   }
@@ -143,34 +143,50 @@ export class Logger {
    * Log structured import summary (default level)
    */
   logImportSummary(summary: ImportSummary): void {
-    if (!this.shouldLog('default')) return;
+    if (!this.shouldLog("default")) return;
 
-    const statusIcon = summary.status === 'success' ? '✅' : summary.status === 'error' ? '❌' : '🚫';
+    const statusIcon =
+      summary.status === "success"
+        ? "✅"
+        : summary.status === "error"
+          ? "❌"
+          : "🚫";
 
-    this.info('');
+    this.info("");
     this.info(`📊 Import Summary: ${summary.configName}`);
-    this.info(`├─ Repository: ${summary.repository}${summary.ref ? `@${summary.ref}` : ''}`);
-    this.info(`├─ Files: ${summary.filesProcessed} processed, ${summary.filesUpdated} updated, ${summary.filesUnchanged} unchanged`);
+    this.info(
+      `├─ Repository: ${summary.repository}${summary.ref ? `@${summary.ref}` : ""}`,
+    );
+    this.info(
+      `├─ Files: ${summary.filesProcessed} processed, ${summary.filesUpdated} updated, ${summary.filesUnchanged} unchanged`,
+    );
 
-    if (summary.assetsDownloaded !== undefined || summary.assetsCached !== undefined) {
+    if (
+      summary.assetsDownloaded !== undefined ||
+      summary.assetsCached !== undefined
+    ) {
       const downloaded = summary.assetsDownloaded || 0;
       const cached = summary.assetsCached || 0;
       this.info(`├─ Assets: ${downloaded} downloaded, ${cached} cached`);
     }
 
     this.info(`├─ Duration: ${(summary.duration / 1000).toFixed(1)}s`);
-    this.info(`└─ Status: ${statusIcon} ${summary.status === 'success' ? 'Success' : summary.status === 'error' ? `Error: ${summary.error}` : 'Cancelled'}`);
-    this.info('');
+    this.info(
+      `└─ Status: ${statusIcon} ${summary.status === "success" ? "Success" : summary.status === "error" ? `Error: ${summary.error}` : "Cancelled"}`,
+    );
+    this.info("");
   }
 
   /**
    * Log sync operation summary (default level)
    */
   logSyncSummary(configName: string, summary: SyncSummary): void {
-    if (!this.shouldLog('default')) return;
+    if (!this.shouldLog("default")) return;
 
     if (summary.added > 0 || summary.updated > 0 || summary.deleted > 0) {
-      this.info(`Sync completed for ${configName}: ${summary.added} added, ${summary.updated} updated, ${summary.deleted} deleted (${summary.duration}ms)`);
+      this.info(
+        `Sync completed for ${configName}: ${summary.added} added, ${summary.updated} updated, ${summary.deleted} deleted (${summary.duration}ms)`,
+      );
     } else {
       this.info(`No changes needed for ${configName} (${summary.duration}ms)`);
     }
@@ -180,10 +196,12 @@ export class Logger {
    * Log cleanup operation summary (default level)
    */
   logCleanupSummary(configName: string, summary: CleanupSummary): void {
-    if (!this.shouldLog('default')) return;
+    if (!this.shouldLog("default")) return;
 
     if (summary.deleted > 0) {
-      this.info(`Cleanup completed for ${configName}: ${summary.deleted} obsolete files deleted (${summary.duration}ms)`);
+      this.info(
+        `Cleanup completed for ${configName}: ${summary.deleted} obsolete files deleted (${summary.duration}ms)`,
+      );
     } else {
       this.debug(`No cleanup needed for ${configName} (${summary.duration}ms)`);
     }
@@ -193,15 +211,23 @@ export class Logger {
    * Log file-level processing (verbose level)
    */
   logFileProcessing(action: string, filePath: string, details?: string): void {
-    const message = details ? `${action}: ${filePath} - ${details}` : `${action}: ${filePath}`;
+    const message = details
+      ? `${action}: ${filePath} - ${details}`
+      : `${action}: ${filePath}`;
     this.verbose(message);
   }
 
   /**
    * Log asset processing (verbose level)
    */
-  logAssetProcessing(action: string, assetPath: string, details?: string): void {
-    const message = details ? `Asset ${action}: ${assetPath} - ${details}` : `Asset ${action}: ${assetPath}`;
+  logAssetProcessing(
+    action: string,
+    assetPath: string,
+    details?: string,
+  ): void {
+    const message = details
+      ? `Asset ${action}: ${assetPath} - ${details}`
+      : `Asset ${action}: ${assetPath}`;
     this.verbose(message);
   }
 
@@ -254,8 +280,8 @@ export class Logger {
   /**
    * Start a spinner with duration timer for long-running operations
    */
-  startSpinner(message: string = 'Processing...'): void {
-    if (this.level === 'silent') return;
+  startSpinner(message: string = "Processing..."): void {
+    if (this.level === "silent") return;
 
     this.spinnerStartTime = Date.now();
     this.spinnerIndex = 0;
@@ -264,7 +290,9 @@ export class Logger {
       const elapsed = Math.floor((Date.now() - this.spinnerStartTime!) / 1000);
       const spinner = this.spinnerChars[this.spinnerIndex];
       const duration = this.formatDuration(elapsed);
-      const formattedMessage = this.formatMessage(`${message} ${spinner} (${duration})`);
+      const formattedMessage = this.formatMessage(
+        `${message} ${spinner} (${duration})`,
+      );
       process.stdout.write(`\r${formattedMessage}`);
       this.spinnerIndex = (this.spinnerIndex + 1) % this.spinnerChars.length;
     };
@@ -288,13 +316,15 @@ export class Logger {
     if (finalMessage && this.spinnerStartTime) {
       const totalTime = Math.floor((Date.now() - this.spinnerStartTime) / 1000);
       const duration = this.formatDuration(totalTime);
-      const formattedMessage = this.formatMessage(`${finalMessage} (${duration})`);
+      const formattedMessage = this.formatMessage(
+        `${finalMessage} (${duration})`,
+      );
       process.stdout.write(`\r${formattedMessage}\n`);
     } else if (finalMessage) {
       const formattedMessage = this.formatMessage(finalMessage);
       process.stdout.write(`\r${formattedMessage}\n`);
     } else {
-      process.stdout.write('\r\x1b[K'); // Clear the line
+      process.stdout.write("\r\x1b[K"); // Clear the line
     }
 
     this.spinnerStartTime = undefined;
@@ -303,14 +333,23 @@ export class Logger {
   /**
    * Execute a function with spinner feedback
    */
-  async withSpinner<T>(message: string, fn: () => Promise<T>, successMessage?: string, errorMessage?: string): Promise<T> {
+  async withSpinner<T>(
+    message: string,
+    fn: () => Promise<T>,
+    successMessage?: string,
+    errorMessage?: string,
+  ): Promise<T> {
     this.startSpinner(message);
     try {
       const result = await fn();
-      this.stopSpinner(successMessage || `✅ ${message.replace(/^[🔄⏳]?\s*/, '')} completed`);
+      this.stopSpinner(
+        successMessage || `✅ ${message.replace(/^[🔄⏳]?\s*/, "")} completed`,
+      );
       return result;
     } catch (error) {
-      this.stopSpinner(errorMessage || `❌ ${message.replace(/^[🔄⏳]?\s*/, '')} failed`);
+      this.stopSpinner(
+        errorMessage || `❌ ${message.replace(/^[🔄⏳]?\s*/, "")} failed`,
+      );
       throw error;
     }
   }
@@ -319,6 +358,9 @@ export class Logger {
 /**
  * Create a logger instance with the specified level
  */
-export function createLogger(level: LogLevel = 'default', prefix?: string): Logger {
+export function createLogger(
+  level: LogLevel = "default",
+  prefix?: string,
+): Logger {
   return new Logger({ level, prefix });
 }

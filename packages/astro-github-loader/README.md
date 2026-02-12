@@ -68,10 +68,10 @@ export const collections = {
 
 The loader supports two authentication methods with different rate limits:
 
-| Method | Rate Limit | Best For |
-|--------|-----------|----------|
+| Method                       | Rate Limit           | Best For                                      |
+| ---------------------------- | -------------------- | --------------------------------------------- |
 | **GitHub App** (Recommended) | 15,000 requests/hour | Production, large imports, organizational use |
-| **Personal Access Token** | 5,000 requests/hour | Development, small imports |
+| **Personal Access Token**    | 5,000 requests/hour  | Development, small imports                    |
 
 ### Option 1: GitHub App Authentication (Recommended - 3x Rate Limit)
 
@@ -252,6 +252,7 @@ export const collections = {
 ```
 
 In this example:
+
 - **Stable docs** (v2.0.0 tag): Never re-imports, provides stable reference
 - **Latest docs** (main branch): Only re-imports when main branch changes
 - **Beta features** (beta branch): Only re-imports when beta branch changes
@@ -595,18 +596,18 @@ const REMOTE_CONTENT: ImportOptions[] = [
     name: "Docs that need clearing",
     owner: "your-org",
     repo: "docs-repo",
-    clear: true,  // Enable clearing for this config only
+    clear: true, // Enable clearing for this config only
     includes: [
-      { pattern: "docs/**/*.md", basePath: "src/content/docs/imported" }
+      { pattern: "docs/**/*.md", basePath: "src/content/docs/imported" },
     ],
   },
   {
     name: "Docs that don't need clearing",
     owner: "your-org",
     repo: "other-docs",
-    clear: false,  // Explicitly disable (or omit for default behavior)
+    clear: false, // Explicitly disable (or omit for default behavior)
     includes: [
-      { pattern: "guides/**/*.md", basePath: "src/content/docs/guides" }
+      { pattern: "guides/**/*.md", basePath: "src/content/docs/guides" },
     ],
   },
 ];
@@ -615,7 +616,7 @@ const REMOTE_CONTENT: ImportOptions[] = [
 await githubLoader({
   octokit,
   configs: REMOTE_CONTENT,
-  clear: true,  // Global default - can be overridden per-config
+  clear: true, // Global default - can be overridden per-config
 }).load(context);
 ```
 
@@ -627,6 +628,7 @@ await githubLoader({
 ### How It Works
 
 Unlike a bulk clear operation, the loader uses a selective delete-before-set approach:
+
 1. For each file being imported, if an entry already exists, it's deleted immediately before the new entry is added
 2. This atomic replacement ensures the content collection is never empty
 3. Astro's content collection system handles individual deletions gracefully
@@ -682,6 +684,7 @@ The loader uses intelligent, ref-aware change detection:
 - **Efficient checking**: Only the latest commit of your target ref is checked
 
 **Examples**:
+
 - Config tracking `main` branch → only `main` commits trigger re-import
 - Config tracking `v2.1.0` tag → never re-imports (tags are immutable)
 - Config tracking `feature-branch` → ignores commits to `main`, `develop`, etc.

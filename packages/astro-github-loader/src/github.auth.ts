@@ -29,8 +29,12 @@ export type GitHubAuthConfig = GitHubAppAuthConfig | GitHubPATAuthConfig;
 /**
  * Type guard to check if config is GitHub App authentication
  */
-function isGitHubAppAuth(config: GitHubAuthConfig): config is GitHubAppAuthConfig {
-  return 'appId' in config && 'privateKey' in config && 'installationId' in config;
+function isGitHubAppAuth(
+  config: GitHubAuthConfig,
+): config is GitHubAppAuthConfig {
+  return (
+    "appId" in config && "privateKey" in config && "installationId" in config
+  );
 }
 
 /**
@@ -119,15 +123,19 @@ export function createOctokitFromEnv(): Octokit {
   if (appId && privateKey && installationId) {
     // Decode private key if it's base64 encoded (for easier .env storage)
     let decodedPrivateKey = privateKey;
-    if (!privateKey.includes('BEGIN RSA PRIVATE KEY') && !privateKey.includes('BEGIN PRIVATE KEY')) {
+    if (
+      !privateKey.includes("BEGIN RSA PRIVATE KEY") &&
+      !privateKey.includes("BEGIN PRIVATE KEY")
+    ) {
       try {
-        decodedPrivateKey = Buffer.from(privateKey, 'base64').toString('utf-8');
+        decodedPrivateKey = Buffer.from(privateKey, "base64").toString("utf-8");
       } catch {
         // If decoding fails, use as-is (might already be plaintext)
       }
     }
 
-    console.log('✓ Using GitHub App authentication (15,000 requests/hour)');
+    // eslint-disable-next-line no-console -- startup message before logger exists
+    console.log("✓ Using GitHub App authentication (15,000 requests/hour)");
     return createAuthenticatedOctokit({
       appId,
       privateKey: decodedPrivateKey,
@@ -138,14 +146,20 @@ export function createOctokitFromEnv(): Octokit {
   // Fallback to Personal Access Token
   const token = process.env.GITHUB_TOKEN;
   if (token) {
-    console.log('✓ Using Personal Access Token authentication (5,000 requests/hour)');
-    console.log('💡 Consider switching to GitHub App for 3x higher rate limits');
+    // eslint-disable-next-line no-console -- startup message before logger exists
+    console.log(
+      "✓ Using Personal Access Token authentication (5,000 requests/hour)",
+    );
+    // eslint-disable-next-line no-console -- startup message before logger exists
+    console.log(
+      "💡 Consider switching to GitHub App for 3x higher rate limits",
+    );
     return createAuthenticatedOctokit({ token });
   }
 
   throw new Error(
-    'No GitHub authentication credentials found. Please set either:\n' +
-    '  - GITHUB_TOKEN (for PAT authentication)\n' +
-    '  - GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_INSTALLATION_ID (for GitHub App authentication)'
+    "No GitHub authentication credentials found. Please set either:\n" +
+      "  - GITHUB_TOKEN (for PAT authentication)\n" +
+      "  - GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_INSTALLATION_ID (for GitHub App authentication)",
   );
 }

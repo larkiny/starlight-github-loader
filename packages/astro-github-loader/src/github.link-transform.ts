@@ -1,7 +1,14 @@
-import { slug } from 'github-slugger';
-import path from 'node:path';
-import type { LinkMapping, LinkTransformContext, MatchedPattern, IncludePattern, PathMappingValue, EnhancedPathMapping } from './github.types.js';
-import type { Logger } from './github.logger.js';
+import { slug } from "github-slugger";
+import path from "node:path";
+import type {
+  LinkMapping,
+  LinkTransformContext,
+  MatchedPattern,
+  IncludePattern,
+  PathMappingValue,
+  EnhancedPathMapping,
+} from "./github.types.js";
+import type { Logger } from "./github.logger.js";
 
 /**
  * Represents an imported file with its content and metadata
@@ -66,8 +73,8 @@ interface LinkContext {
  */
 function extractAnchor(link: string): { path: string; anchor: string } {
   const anchorMatch = link.match(/#.*$/);
-  const anchor = anchorMatch ? anchorMatch[0] : '';
-  const path = link.replace(/#.*$/, '');
+  const anchor = anchorMatch ? anchorMatch[0] : "";
+  const path = link.replace(/#.*$/, "");
   return { path, anchor };
 }
 
@@ -83,16 +90,12 @@ function isExternalLink(link: string): boolean {
     /^tel:/.test(link) ||
     /^ftp:/.test(link) ||
     /^ftps:\/\//.test(link) ||
-
     // Any protocol with ://
-    link.includes('://') ||
-
+    link.includes("://") ||
     // Anchor-only links (same page)
-    link.startsWith('#') ||
-
+    link.startsWith("#") ||
     // Data URLs
     /^data:/.test(link) ||
-
     // File protocol
     /^file:\/\//.test(link)
   );
@@ -101,17 +104,30 @@ function isExternalLink(link: string): boolean {
 /**
  * Normalize path separators and resolve relative paths
  */
-function normalizePath(linkPath: string, currentFilePath: string, logger?: Logger): string {
-  logger?.debug(`[normalizePath] BEFORE: linkPath="${linkPath}", currentFilePath="${currentFilePath}"`);
+function normalizePath(
+  linkPath: string,
+  currentFilePath: string,
+  logger?: Logger,
+): string {
+  logger?.debug(
+    `[normalizePath] BEFORE: linkPath="${linkPath}", currentFilePath="${currentFilePath}"`,
+  );
 
   // Handle relative paths (including simple relative paths without ./ prefix)
   // A link is relative if it doesn't start with / or contain a protocol
-  const isAbsoluteOrExternal = linkPath.startsWith('/') || linkPath.includes('://') || linkPath.startsWith('#');
+  const isAbsoluteOrExternal =
+    linkPath.startsWith("/") ||
+    linkPath.includes("://") ||
+    linkPath.startsWith("#");
 
   if (!isAbsoluteOrExternal) {
     const currentDir = path.dirname(currentFilePath);
-    const resolved = path.posix.normalize(path.posix.join(currentDir, linkPath));
-    logger?.debug(`[normalizePath] RELATIVE PATH RESOLVED: "${linkPath}" -> "${resolved}" (currentDir: "${currentDir}")`);
+    const resolved = path.posix.normalize(
+      path.posix.join(currentDir, linkPath),
+    );
+    logger?.debug(
+      `[normalizePath] RELATIVE PATH RESOLVED: "${linkPath}" -> "${resolved}" (currentDir: "${currentDir}")`,
+    );
     return resolved;
   }
 
@@ -125,7 +141,7 @@ function normalizePath(linkPath: string, currentFilePath: string, logger?: Logge
 function applyLinkMappings(
   linkUrl: string,
   linkMappings: LinkMapping[],
-  context: LinkContext
+  context: LinkContext,
 ): string {
   const { path: linkPath, anchor } = extractAnchor(linkUrl);
   let transformedPath = linkPath;
@@ -141,24 +157,27 @@ function applyLinkMappings(
     // Handle relative links automatically if enabled
     if (mapping.relativeLinks && context.currentFile.linkContext) {
       // Check if this is a relative link (doesn't start with /, http, etc.)
-      if (!linkPath.startsWith('/') && !isExternalLink(linkPath)) {
+      if (!linkPath.startsWith("/") && !isExternalLink(linkPath)) {
         // Check if the link points to a known directory structure
-        const knownPaths = ['modules/', 'classes/', 'interfaces/', 'enums/'];
-        const isKnownPath = knownPaths.some(p => linkPath.startsWith(p));
+        const knownPaths = ["modules/", "classes/", "interfaces/", "enums/"];
+        const isKnownPath = knownPaths.some((p) => linkPath.startsWith(p));
 
         if (isKnownPath) {
           // Strip .md extension from the link path
-          const cleanLinkPath = linkPath.replace(/\.md$/, '');
+          const cleanLinkPath = linkPath.replace(/\.md$/, "");
 
           // Convert relative path to absolute path using the target base
-          const targetBase = generateSiteUrl(context.currentFile.linkContext.basePath, context.global.stripPrefixes);
+          const targetBase = generateSiteUrl(
+            context.currentFile.linkContext.basePath,
+            context.global.stripPrefixes,
+          );
 
           // Construct final URL with proper Starlight formatting
-          let finalUrl = targetBase.replace(/\/$/, '') + '/' + cleanLinkPath;
+          let finalUrl = targetBase.replace(/\/$/, "") + "/" + cleanLinkPath;
 
           // Add trailing slash if it doesn't end with one and isn't empty
-          if (finalUrl && !finalUrl.endsWith('/')) {
-            finalUrl += '/';
+          if (finalUrl && !finalUrl.endsWith("/")) {
+            finalUrl += "/";
           }
 
           transformedPath = finalUrl;
@@ -168,16 +187,25 @@ function applyLinkMappings(
     }
 
     let matched = false;
-    let replacement = '';
+    let replacement = "";
 
-    if (typeof mapping.pattern === 'string') {
+    if (typeof mapping.pattern === "string") {
       // String pattern - exact match or contains
       if (transformedPath.includes(mapping.pattern)) {
         matched = true;
-        if (typeof mapping.replacement === 'string') {
-          replacement = transformedPath.replace(mapping.pattern, mapping.replacement);
+        if (typeof mapping.replacement === "string") {
+          replacement = transformedPath.replace(
+            mapping.pattern,
+            mapping.replacement,
+          );
         } else {
-          replacement = mapping.replacement(transformedPath, anchor, context);
+          const linkTransformContext =
+            context.currentFile.linkContext ?? ({} as LinkTransformContext);
+          replacement = mapping.replacement(
+            transformedPath,
+            anchor,
+            linkTransformContext,
+          );
         }
       }
     } else {
@@ -185,10 +213,19 @@ function applyLinkMappings(
       const match = transformedPath.match(mapping.pattern);
       if (match) {
         matched = true;
-        if (typeof mapping.replacement === 'string') {
-          replacement = transformedPath.replace(mapping.pattern, mapping.replacement);
+        if (typeof mapping.replacement === "string") {
+          replacement = transformedPath.replace(
+            mapping.pattern,
+            mapping.replacement,
+          );
         } else {
-          replacement = mapping.replacement(transformedPath, anchor, context);
+          const linkTransformContext =
+            context.currentFile.linkContext ?? ({} as LinkTransformContext);
+          replacement = mapping.replacement(
+            transformedPath,
+            anchor,
+            linkTransformContext,
+          );
         }
       }
     }
@@ -218,35 +255,37 @@ function generateSiteUrl(targetPath: string, stripPrefixes: string[]): string {
   }
 
   // Remove leading slash if present
-  url = url.replace(/^\//, '');
+  url = url.replace(/^\//, "");
 
   // Remove file extension
-  url = url.replace(/\.(md|mdx)$/i, '');
+  url = url.replace(/\.(md|mdx)$/i, "");
 
   // Handle index files - they should resolve to parent directory
-  if (url.endsWith('/index')) {
-    url = url.replace('/index', '');
-  } else if (url === 'index') {
-    url = '';
+  if (url.endsWith("/index")) {
+    url = url.replace("/index", "");
+  } else if (url === "index") {
+    url = "";
   }
 
   // Split path into segments and slugify each
-  const segments = url.split('/').map(segment => segment ? slug(segment) : '');
+  const segments = url
+    .split("/")
+    .map((segment) => (segment ? slug(segment) : ""));
 
   // Reconstruct URL
-  url = segments.filter(s => s).join('/');
+  url = segments.filter((s) => s).join("/");
 
   // Ensure leading slash
-  if (url && !url.startsWith('/')) {
-    url = '/' + url;
+  if (url && !url.startsWith("/")) {
+    url = "/" + url;
   }
 
   // Add trailing slash for non-empty paths
-  if (url && !url.endsWith('/')) {
-    url = url + '/';
+  if (url && !url.endsWith("/")) {
+    url = url + "/";
   }
 
-  return url || '/';
+  return url || "/";
 }
 
 /**
@@ -260,7 +299,11 @@ function generateSiteUrl(targetPath: string, stripPrefixes: string[]): string {
  * 5. Apply non-global path mappings if unresolved
  * 6. Check custom handlers
  */
-function transformLink(linkText: string, linkUrl: string, context: LinkContext): string {
+function transformLink(
+  linkText: string,
+  linkUrl: string,
+  context: LinkContext,
+): string {
   // Skip external links FIRST - no transformations should ever be applied to them
   if (isExternalLink(linkUrl)) {
     return `[${linkText}](${linkUrl})`;
@@ -269,14 +312,22 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
   const { path: linkPath, anchor } = extractAnchor(linkUrl);
 
   // Normalize the link path relative to current file FIRST
-  const normalizedPath = normalizePath(linkPath, context.currentFile.sourcePath, context.global.logger);
+  const normalizedPath = normalizePath(
+    linkPath,
+    context.currentFile.sourcePath,
+    context.global.logger,
+  );
 
   // Apply global path mappings to the normalized path
   let processedNormalizedPath = normalizedPath;
   if (context.global.linkMappings) {
-    const globalMappings = context.global.linkMappings.filter(m => m.global);
+    const globalMappings = context.global.linkMappings.filter((m) => m.global);
     if (globalMappings.length > 0) {
-      processedNormalizedPath = applyLinkMappings(normalizedPath + anchor, globalMappings, context);
+      processedNormalizedPath = applyLinkMappings(
+        normalizedPath + anchor,
+        globalMappings,
+        context,
+      );
       // Extract path again after global mappings
       const { path: newPath } = extractAnchor(processedNormalizedPath);
       processedNormalizedPath = newPath;
@@ -287,8 +338,10 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
   let targetPath = context.global.sourceToTargetMap.get(normalizedPath);
 
   // If not found and path ends with /, try looking for index.md
-  if (!targetPath && normalizedPath.endsWith('/')) {
-    targetPath = context.global.sourceToTargetMap.get(normalizedPath + 'index.md');
+  if (!targetPath && normalizedPath.endsWith("/")) {
+    targetPath = context.global.sourceToTargetMap.get(
+      normalizedPath + "index.md",
+    );
   }
 
   if (targetPath) {
@@ -299,10 +352,16 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
 
   // Apply non-global path mappings to unresolved links
   if (context.global.linkMappings) {
-    const nonGlobalMappings = context.global.linkMappings.filter(m => !m.global);
+    const nonGlobalMappings = context.global.linkMappings.filter(
+      (m) => !m.global,
+    );
     if (nonGlobalMappings.length > 0) {
-      const mappedUrl = applyLinkMappings(processedNormalizedPath + anchor, nonGlobalMappings, context);
-      if (mappedUrl !== (processedNormalizedPath + anchor)) {
+      const mappedUrl = applyLinkMappings(
+        processedNormalizedPath + anchor,
+        nonGlobalMappings,
+        context,
+      );
+      if (mappedUrl !== processedNormalizedPath + anchor) {
         return `[${linkText}](${mappedUrl})`;
       }
     }
@@ -321,7 +380,7 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
 
   // No transformation matched - strip .md extension from unresolved internal links
   // This handles links to files that weren't imported but should still use Starlight routing
-  const cleanPath = processedNormalizedPath.replace(/\.md$/i, '');
+  const cleanPath = processedNormalizedPath.replace(/\.md$/i, "");
   return `[${linkText}](${cleanPath + anchor})`;
 }
 
@@ -336,7 +395,7 @@ export function globalLinkTransform(
     customHandlers?: LinkHandler[];
     linkMappings?: LinkMapping[];
     logger?: Logger;
-  }
+  },
 ): ImportedFile[] {
   // Build global context
   const sourceToTargetMap = new Map<string, string>();
@@ -359,21 +418,23 @@ export function globalLinkTransform(
   // Transform links in all files
   const markdownLinkRegex = /\[([^\]]*)\]\(([^)]+)\)/g;
 
-  return importedFiles.map(file => ({
+  return importedFiles.map((file) => ({
     ...file,
-    content: file.content.replace(markdownLinkRegex, (match, linkText, linkUrl) => {
-      const linkContext: LinkContext = {
-        currentFile: file,
-        originalLink: linkUrl,
-        anchor: extractAnchor(linkUrl).anchor,
-        global: globalContext,
-      };
+    content: file.content.replace(
+      markdownLinkRegex,
+      (match, linkText, linkUrl) => {
+        const linkContext: LinkContext = {
+          currentFile: file,
+          originalLink: linkUrl,
+          anchor: extractAnchor(linkUrl).anchor,
+          global: globalContext,
+        };
 
-      return transformLink(linkText, linkUrl, linkContext);
-    }),
+        return transformLink(linkText, linkUrl, linkContext);
+      },
+    ),
   }));
 }
-
 
 /**
  * Infer cross-section path from basePath
@@ -381,9 +442,7 @@ export function globalLinkTransform(
  * @returns Inferred cross-section path (e.g., '/reference/api')
  */
 function inferCrossSectionPath(basePath: string): string {
-  return basePath
-    .replace(/^src\/content\/docs/, '')
-    .replace(/\/$/, '') || '/';
+  return basePath.replace(/^src\/content\/docs/, "").replace(/\/$/, "") || "/";
 }
 
 /**
@@ -394,7 +453,7 @@ function inferCrossSectionPath(basePath: string): string {
  */
 export function generateAutoLinkMappings(
   includes: IncludePattern[],
-  stripPrefixes: string[] = []
+  stripPrefixes: string[] = [],
 ): LinkMapping[] {
   const linkMappings: LinkMapping[] = [];
 
@@ -403,28 +462,43 @@ export function generateAutoLinkMappings(
 
     const inferredCrossSection = inferCrossSectionPath(includePattern.basePath);
 
-    for (const [sourcePath, mappingValue] of Object.entries(includePattern.pathMappings)) {
+    for (const [sourcePath, mappingValue] of Object.entries(
+      includePattern.pathMappings,
+    )) {
       // Handle both string and enhanced object formats
-      const targetPath = typeof mappingValue === 'string' ? mappingValue : mappingValue.target;
-      const crossSectionPath = typeof mappingValue === 'object' && mappingValue.crossSectionPath
-        ? mappingValue.crossSectionPath
-        : inferredCrossSection;
+      const targetPath =
+        typeof mappingValue === "string" ? mappingValue : mappingValue.target;
+      const crossSectionPath =
+        typeof mappingValue === "object" && mappingValue.crossSectionPath
+          ? mappingValue.crossSectionPath
+          : inferredCrossSection;
 
-      if (sourcePath.endsWith('/')) {
+      if (sourcePath.endsWith("/")) {
         // Folder mapping - use regex with capture group
-        const sourcePattern = sourcePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const sourcePattern = sourcePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
         linkMappings.push({
           pattern: new RegExp(`^${sourcePattern}(.+)$`),
-          replacement: (transformedPath: string, anchor: string, context: any) => {
-            const relativePath = transformedPath.replace(new RegExp(`^${sourcePattern}`), '');
+          replacement: (
+            transformedPath: string,
+            _anchor: string,
+            _context: LinkTransformContext,
+          ) => {
+            const relativePath = transformedPath.replace(
+              new RegExp(`^${sourcePattern}`),
+              "",
+            );
             let finalPath: string;
-            if (crossSectionPath && crossSectionPath !== '/') {
-              finalPath = targetPath === ''
-                ? `${crossSectionPath}/${relativePath}`
-                : `${crossSectionPath}/${targetPath}${relativePath}`;
+            if (crossSectionPath && crossSectionPath !== "/") {
+              finalPath =
+                targetPath === ""
+                  ? `${crossSectionPath}/${relativePath}`
+                  : `${crossSectionPath}/${targetPath}${relativePath}`;
             } else {
-              finalPath = targetPath === '' ? relativePath : `${targetPath}${relativePath}`;
+              finalPath =
+                targetPath === ""
+                  ? relativePath
+                  : `${targetPath}${relativePath}`;
             }
             return generateSiteUrl(finalPath, stripPrefixes);
           },
@@ -432,14 +506,19 @@ export function generateAutoLinkMappings(
         });
       } else {
         // File mapping - exact string match
-        const sourcePattern = sourcePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const sourcePattern = sourcePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
         linkMappings.push({
           pattern: new RegExp(`^${sourcePattern}$`),
-          replacement: (transformedPath: string, anchor: string, context: any) => {
-            const finalPath = crossSectionPath && crossSectionPath !== '/'
-              ? `${crossSectionPath}/${targetPath}`
-              : targetPath;
+          replacement: (
+            _transformedPath: string,
+            _anchor: string,
+            _context: LinkTransformContext,
+          ) => {
+            const finalPath =
+              crossSectionPath && crossSectionPath !== "/"
+                ? `${crossSectionPath}/${targetPath}`
+                : targetPath;
             return generateSiteUrl(finalPath, stripPrefixes);
           },
           global: true,
