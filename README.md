@@ -9,7 +9,7 @@ A powerful content loader for Astro that enables importing and transforming cont
 - 🛠️ **Content Transforms** - Apply custom transformations to content during import, with pattern-specific transforms
 - ⚡ **Change Detection** - Built-in dry-run mode to check for repository changes without importing
 - 🔗 **Smart Link Resolution** - Intelligent cross-reference handling with context-aware transformations
-- 🚀 **Optimized Performance** - Smart directory scanning to minimize GitHub API calls
+- 🚀 **Optimized Performance** - Git Trees API for efficient file discovery with minimal API calls
 
 ## Repository Structure
 
