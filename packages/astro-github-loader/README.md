@@ -9,7 +9,7 @@ Load content from GitHub repositories into Astro content collections with flexib
 - 🛠️ **Content Transforms** - Apply custom transformations to content during import, with pattern-specific transforms
 - ⚡ **Intelligent Change Detection** - Ref-aware commit tracking that only triggers re-imports when your target branch/tag actually changes
 - 🔒 **Stable Imports** - Non-destructive approach that preserves local content collections
-- 🚀 **Optimized Performance** - Smart directory scanning to minimize GitHub API calls
+- 🚀 **Optimized Performance** - Git Trees API for efficient file discovery with minimal API calls
 
 ## Quick Start
 
@@ -21,7 +21,6 @@ import {
   githubLoader,
   createOctokitFromEnv,
   type ImportOptions,
-  type LoaderContext,
 } from "@larkiny/astro-github-loader";
 
 const REMOTE_CONTENT: ImportOptions[] = [
@@ -55,7 +54,7 @@ export const collections = {
             configs: [config],
             clear: config.clear,
             dryRun: false, // Set to true for change detection only
-          }).load(context as LoaderContext);
+          }).load(context);
         }
       },
     },
@@ -501,7 +500,6 @@ const REMOTE_CONTENT: ImportOptions[] = [
             return `/reference/algokit-cli`;
           },
           global: true,
-          description: "Map CLI reference links to reference section",
         },
 
         // Transform README links to introduction
@@ -511,46 +509,12 @@ const REMOTE_CONTENT: ImportOptions[] = [
             return `/introduction`;
           },
           global: true,
-          description: "Map README links to introduction page",
         },
       ],
     },
   },
 ];
 ```
-
-## Link Transformation Utilities
-
-Handle markdown links with anchor fragments using built-in utilities:
-
-```typescript
-import {
-  createLinkTransform,
-  extractAnchor,
-  removeMarkdownExtension,
-} from "@larkiny/astro-github-loader";
-
-const linkTransform = createLinkTransform({
-  baseUrl: "/docs/imported",
-  pathTransform: (path, context) => {
-    const { path: cleanPath, anchor } = extractAnchor(path);
-
-    // Custom link handling logic
-    if (cleanPath === "README.md") {
-      return `/docs/imported/overview${anchor}`;
-    }
-
-    // Use utility to remove .md extension and preserve anchors
-    return `/docs/imported/${removeMarkdownExtension(path)}`;
-  },
-});
-```
-
-### Link Transform Utilities
-
-- **`extractAnchor(path)`** - Returns `{path, anchor}` separating the anchor fragment
-- **`removeMarkdownExtension(path)`** - Removes `.md`/`.mdx` extensions while preserving anchors
-- **`createLinkTransform(options)`** - Main transform with custom path handling
 
 ## Asset Import and Management
 
@@ -746,13 +710,16 @@ interface LinkMapping {
   /** Replacement string or function */
   replacement:
     | string
-    | ((match: string, anchor: string, context: any) => string);
+    | ((match: string, anchor: string, context: LinkTransformContext) => string);
 
   /** Apply to all links, not just unresolved internal links (default: false) */
   global?: boolean;
 
-  /** Description for debugging (optional) */
-  description?: string;
+  /** Function to determine if this mapping should apply to the current file context */
+  contextFilter?: (context: LinkTransformContext) => boolean;
+
+  /** Automatically handle relative links by prefixing with target base path (default: false) */
+  relativeLinks?: boolean;
 }
 
 interface IncludePattern {
@@ -768,15 +735,17 @@ interface IncludePattern {
   /**
    * Map of source paths to target paths for controlling where files are imported.
    *
-   * Supports two types of mappings:
-   * - **File mapping**: `'docs/README.md': 'docs/overview.md'` - moves a specific file to a new path
-   * - **Folder mapping**: `'docs/capabilities/': 'docs/'` - moves all files from source folder to target folder
+   * Supports two mapping formats:
+   * - **Simple string**: `'docs/README.md': 'docs/overview.md'`
+   * - **Enhanced object**: `'docs/api/': { target: 'api/', crossSectionPath: '/reference/api' }`
+   *
+   * And two mapping scopes:
+   * - **File mapping**: Exact file path match (e.g., `'docs/README.md': 'docs/overview.md'`)
+   * - **Folder mapping**: Trailing slash moves all files (e.g., `'docs/capabilities/': 'docs/'`)
    *
    * **Important**: Folder mappings require trailing slashes to distinguish from file mappings.
-   * - ✅ `'docs/capabilities/': 'docs/'` (folder mapping - moves all files)
-   * - ❌ `'docs/capabilities': 'docs/'` (treated as exact file match)
    */
-  pathMappings?: Record<string, string>;
+  pathMappings?: Record<string, PathMappingValue>;
 }
 ```
 
@@ -804,8 +773,8 @@ type TransformFunction = (content: string, context: TransformContext) => string;
 
 The loader includes several optimizations:
 
-- **Smart directory scanning**: Only scans directories that match include patterns
-- **Efficient API usage**: Minimizes GitHub API calls through targeted requests
+- **Git Trees API**: Retrieves the entire repository file tree in a single API call (2 total: 1 for commit SHA + 1 for tree), replacing recursive directory traversal
+- **Efficient API usage**: Minimizes GitHub API calls regardless of repository size or depth
 - **Ref-aware change detection**: Tracks commit SHA for specific git references (branches/tags) to avoid unnecessary downloads when unrelated branches change
 - **Concurrent processing**: Downloads and processes files in parallel
 
