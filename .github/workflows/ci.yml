@@ -16,6 +16,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npm test
+      - run: npm run lint --workspace @larkiny/astro-github-loader
+      - run: npm test --workspace @larkiny/astro-github-loader
       - run: cd packages/astro-github-loader && npx tsc --noEmit
