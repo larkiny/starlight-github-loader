@@ -20,6 +20,56 @@ import type {
   TransformFunction,
 } from "./github.types.js";
 
+/**
+ * Validates that a basePath is relative and does not escape the project root.
+ * @internal
+ */
+function validateBasePath(basePath: string, projectRoot: string): void {
+  if (path.isAbsolute(basePath)) {
+    throw new Error(`basePath must be relative, got absolute path: ${basePath}`);
+  }
+  const resolved = path.resolve(projectRoot, basePath);
+  const normalized = path.normalize(resolved);
+  if (!normalized.startsWith(path.normalize(projectRoot))) {
+    throw new Error(
+      `basePath "${basePath}" resolves outside project root`,
+    );
+  }
+}
+
+const GITHUB_IDENTIFIER_RE = /^[a-zA-Z0-9._-]+$/;
+const GITHUB_REF_RE = /^[a-zA-Z0-9._\-/]+$/;
+
+/**
+ * Validates a GitHub owner or repo identifier.
+ * @internal
+ */
+function validateGitHubIdentifier(value: string, name: string): void {
+  if (!value || value.length > 100) {
+    throw new Error(`Invalid ${name}: must be 1-100 characters`);
+  }
+  if (!GITHUB_IDENTIFIER_RE.test(value)) {
+    throw new Error(
+      `Invalid ${name}: "${value}" contains disallowed characters`,
+    );
+  }
+}
+
+/**
+ * Validates a GitHub ref (branch/tag name). More permissive than identifiers — allows `/`.
+ * @internal
+ */
+function validateGitHubRef(value: string): void {
+  if (!value || value.length > 256) {
+    throw new Error(`Invalid ref: must be 1-256 characters`);
+  }
+  if (!GITHUB_REF_RE.test(value)) {
+    throw new Error(
+      `Invalid ref: "${value}" contains disallowed characters`,
+    );
+  }
+}
+
 export interface ImportStats {
   processed: number;
   updated: number;
@@ -608,6 +658,22 @@ export async function toCollectionEntry({
   if (typeof repo !== "string" || typeof owner !== "string")
     throw new TypeError(INVALID_STRING_ERROR);
 
+  // Validate identifiers to prevent injection into API calls / URLs
+  validateGitHubIdentifier(owner, "owner");
+  validateGitHubIdentifier(repo, "repo");
+  if (ref !== "main") validateGitHubRef(ref);
+
+  // Validate include pattern basePaths don't escape the project
+  const projectRoot = process.cwd();
+  if (options.includes) {
+    for (const inc of options.includes) {
+      validateBasePath(inc.basePath, projectRoot);
+    }
+  }
+  if (options.assetsPath) {
+    validateBasePath(options.assetsPath, projectRoot);
+  }
+
   const logger = context.logger;
 
   /**
@@ -682,7 +748,8 @@ export async function toCollectionEntry({
   for (const treeItem of fileEntries) {
     const filePath = treeItem.path;
     // Construct the download URL (raw.githubusercontent.com format)
-    const downloadUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${commitSha}/${filePath}`;
+    const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
+    const downloadUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${commitSha}/${encodedPath}`;
     const editUrl = treeItem.url || ""; // Git blob URL (use empty string as fallback)
 
     const fileData = await collectFileData(
