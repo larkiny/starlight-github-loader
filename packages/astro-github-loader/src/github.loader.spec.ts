@@ -1,27 +1,42 @@
-import { beforeEach, describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import { githubLoader } from "./github.loader.js";
 import { globalLinkTransform, type ImportedFile } from "./github.link-transform.js";
 import { createLogger, type ImportSummary } from "./github.logger.js";
+import type { ImportOptions, VersionConfig } from "./github.types.js";
 import { Octokit } from "octokit";
 
-const FIXTURES = [
-  {
-    owner: "awesome-algorand",
-    repo: "algokit-cli",
-    ref: "docs/starlight-preview",
-    path: ".devportal/starlight",
-  },
-];
 describe("githubLoader", () => {
-  let octokit: Octokit;
-  beforeEach(() => {
-    octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+  it("should return a loader object", () => {
+    const octokit = new Octokit({ auth: "mock-token" });
+    const result = githubLoader({ octokit, configs: [] });
+    expect(result).toHaveProperty('name', 'github-loader');
+    expect(result).toHaveProperty('load');
+    expect(typeof result.load).toBe('function');
   });
 
-  it("should work", async () => {
-    const result = githubLoader({ octokit, configs: FIXTURES });
+  it("should accept configs with language and versions fields", () => {
+    const octokit = new Octokit({ auth: "mock-token" });
+    const configs: ImportOptions[] = [
+      {
+        name: "AlgoKit Utils TS",
+        owner: "algorandfoundation",
+        repo: "algokit-utils-ts",
+        ref: "docs-dist",
+        language: "TypeScript",
+        versions: [
+          { slug: "latest", label: "Latest" },
+          { slug: "v8.0.0", label: "v8.0.0" },
+        ],
+        includes: [{
+          pattern: "docs/**/*.md",
+          basePath: "src/content/docs/docs/algokit-utils/typescript",
+        }],
+      },
+    ];
 
-    console.log(result);
+    // Should not throw when constructing the loader with new fields
+    const result = githubLoader({ octokit, configs });
+    expect(result).toHaveProperty('name', 'github-loader');
   });
 
   describe("context-aware link transformations", () => {
@@ -66,7 +81,6 @@ describe("githubLoader", () => {
         ]
       });
 
-      // The relative link `modules/` should be transformed to `/reference/algokit-utils-ts/api/modules/`
       expect(result[0].content).toContain('[modules](/reference/algokit-utils-ts/api/modules/)');
     });
   });
@@ -84,7 +98,7 @@ describe("githubLoader", () => {
       expect(debugLogger.getLevel()).toBe('debug');
     });
 
-    it("should format import summary correctly", () => {
+    it("should format import summary without throwing", () => {
       const logger = createLogger('default');
       const summary: ImportSummary = {
         configName: 'Test Config',
@@ -99,7 +113,6 @@ describe("githubLoader", () => {
         status: 'success'
       };
 
-      // This test mainly verifies the types work correctly
       expect(() => logger.logImportSummary(summary)).not.toThrow();
     });
   });

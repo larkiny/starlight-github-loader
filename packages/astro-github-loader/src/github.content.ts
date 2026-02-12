@@ -172,6 +172,46 @@ export async function syncFile(path: string, content: string) {
 const DEFAULT_ASSET_PATTERNS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp'];
 
 /**
+ * Resolves the effective asset configuration for an import.
+ *
+ * If `assetsPath` and `assetsBaseUrl` are explicitly provided, uses them (existing behavior).
+ * If omitted, derives co-located defaults from the matched include pattern's basePath:
+ * - assetsPath: `{basePath}/assets/` (physical directory on disk)
+ * - assetsBaseUrl: `./assets` (relative reference in markdown)
+ *
+ * @param options - Import options that may or may not have explicit asset config
+ * @param filePath - The file being processed (used to find the matched include pattern)
+ * @returns Resolved assetsPath and assetsBaseUrl, or null if assets should not be processed
+ * @internal
+ */
+export function resolveAssetConfig(
+  options: ImportOptions,
+  filePath: string
+): { assetsPath: string; assetsBaseUrl: string } | null {
+  // Explicit config takes precedence
+  if (options.assetsPath && options.assetsBaseUrl) {
+    return { assetsPath: options.assetsPath, assetsBaseUrl: options.assetsBaseUrl };
+  }
+
+  // If only one is set, that's a misconfiguration — skip
+  if (options.assetsPath || options.assetsBaseUrl) {
+    return null;
+  }
+
+  // Derive co-located defaults from the matched include pattern's basePath
+  const includeResult = shouldIncludeFile(filePath, options);
+  if (includeResult.included && includeResult.matchedPattern) {
+    const basePath = includeResult.matchedPattern.basePath;
+    return {
+      assetsPath: join(basePath, 'assets'),
+      assetsBaseUrl: './assets',
+    };
+  }
+
+  return null;
+}
+
+/**
  * Checks if a file path should be included and returns the matching pattern
  * @param filePath - The file path to check (relative to the repository root)
  * @param options - Import options containing includes patterns
@@ -512,9 +552,10 @@ export async function syncEntry(
   const entryType = configForFile(filePath || "tmp.md");
   if (!entryType) throw new Error("No entry type found");
 
-  // Process assets FIRST if configuration is provided - before content transforms
+  // Process assets FIRST if configuration is provided (or co-located defaults apply)
   // This ensures asset detection works with original markdown links before they get transformed
-  if (options.assetsPath && options.assetsBaseUrl) {
+  const syncEntryAssetConfig = resolveAssetConfig(options, filePath);
+  if (syncEntryAssetConfig) {
     try {
       // Create a dummy logger for syncEntry since it uses Astro's logger
       const dummyLogger = {
@@ -526,7 +567,8 @@ export async function syncEntry(
           logger.info(msg);
         }
       };
-      const assetResult = await processAssets(contents, filePath, options, octokit, dummyLogger as Logger, init.signal || undefined);
+      const optionsWithAssets = { ...options, ...syncEntryAssetConfig };
+      const assetResult = await processAssets(contents, filePath, optionsWithAssets, octokit, dummyLogger as Logger, init.signal || undefined);
       contents = assetResult.content;
     } catch (error: any) {
       logger.warn(`Asset processing failed for ${id}: ${error.message}`);
@@ -874,12 +916,14 @@ export async function toCollectionEntry({
       contents = await res.text();
     }
 
-    // Process assets FIRST if configuration is provided
+    // Process assets FIRST if configuration is provided (or co-located defaults apply)
     let fileAssetsDownloaded = 0;
     let fileAssetsCached = 0;
-    if (options.assetsPath && options.assetsBaseUrl) {
+    const resolvedAssetConfig = resolveAssetConfig(options, filePath);
+    if (resolvedAssetConfig) {
       try {
-        const assetResult = await processAssets(contents, filePath, options, octokit, logger, signal);
+        const optionsWithAssets = { ...options, ...resolvedAssetConfig };
+        const assetResult = await processAssets(contents, filePath, optionsWithAssets, octokit, logger, signal);
         contents = assetResult.content;
         fileAssetsDownloaded = assetResult.assetsDownloaded;
         fileAssetsCached = assetResult.assetsCached;

@@ -245,6 +245,17 @@ export interface RenderedContent {
 }
 
 /**
+ * Represents a version of a library variant to display in the devportal's version picker.
+ * Versions are manually curated in the import config — no auto-discovery.
+ */
+export interface VersionConfig {
+  /** URL segment for this version (e.g., "latest", "v8.0.0") */
+  slug: string;
+  /** Display name for this version (e.g., "Latest", "v8.0.0") */
+  label: string;
+}
+
+/**
  * Represents configuration options for importing content from GitHub repositories.
  */
 export type ImportOptions = {
@@ -305,6 +316,17 @@ export type ImportOptions = {
    * @default 'default'
    */
   logLevel?: LogLevel;
+  /**
+   * Language for this import variant (e.g., "TypeScript", "Python", "Go").
+   * Used for logging and passed through to the devportal for UI display.
+   */
+  language?: string;
+  /**
+   * Versions to display in the devportal's version picker.
+   * Informational — tells the loader which version folders exist in the source content.
+   * The loader imports content as-is; the version folder structure carries through from source to destination.
+   */
+  versions?: VersionConfig[];
 };
 
 export type FetchOptions = RequestInit & {

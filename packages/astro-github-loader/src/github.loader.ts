@@ -112,7 +112,8 @@ export function githubLoader({
         const effectiveLogLevel = logLevel || config.logLevel || 'default';
         const configLogger = createLogger(effectiveLogLevel);
 
-        const configName = config.name || `${config.owner}/${config.repo}`;
+        const langSuffix = config.language ? ` (${config.language})` : '';
+        const configName = config.name ? `${config.name}${langSuffix}` : `${config.owner}/${config.repo}${langSuffix}`;
         const repository = `${config.owner}/${config.repo}`;
 
         let summary: ImportSummary = {
