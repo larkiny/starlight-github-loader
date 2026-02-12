@@ -654,6 +654,7 @@ export async function toCollectionEntry({
   options,
   signal,
   force = false,
+  clear = false,
 }: CollectionEntryOptions): Promise<ImportStats> {
   const { owner, repo, ref = "main" } = options || {};
   if (typeof repo !== "string" || typeof owner !== "string")
@@ -782,7 +783,7 @@ export async function toCollectionEntry({
   stats.processed = processedFiles.length;
   for (const file of processedFiles) {
     logger.logFileProcessing("Storing", file.sourcePath);
-    const result = await storeProcessedFile(file, context, options);
+    const result = await storeProcessedFile(file, context, clear);
     if (result) {
       stats.updated++;
     } else {
@@ -944,7 +945,7 @@ export async function toCollectionEntry({
   async function storeProcessedFile(
     file: ImportedFile,
     context: any,
-    options: ImportOptions
+    clear: boolean
   ): Promise<any> {
     const { store, generateDigest, entryTypes, logger, parseData, config } = context;
 
@@ -987,6 +988,14 @@ export async function toCollectionEntry({
       data,
       filePath: fileUrl.toString(),
     });
+
+    // When clear mode is enabled, delete the existing entry before setting the new one.
+    // This provides atomic replacement without breaking Astro's content collection,
+    // as opposed to calling store.clear() which empties everything at once.
+    if (clear && existingEntry) {
+      logger.debug(`🗑️ Clearing existing entry before replacement: ${file.id}`);
+      store.delete(file.id);
+    }
 
     // Store in content store
     if (entryType.getRenderFunction) {

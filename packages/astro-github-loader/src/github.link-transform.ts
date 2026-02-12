@@ -104,17 +104,15 @@ function isExternalLink(link: string): boolean {
 function normalizePath(linkPath: string, currentFilePath: string, logger?: Logger): string {
   logger?.debug(`[normalizePath] BEFORE: linkPath="${linkPath}", currentFilePath="${currentFilePath}"`);
 
-  // Handle relative paths
-  if (linkPath.startsWith('./') || linkPath.includes('../')) {
+  // Handle relative paths (including simple relative paths without ./ prefix)
+  // A link is relative if it doesn't start with / or contain a protocol
+  const isAbsoluteOrExternal = linkPath.startsWith('/') || linkPath.includes('://') || linkPath.startsWith('#');
+
+  if (!isAbsoluteOrExternal) {
     const currentDir = path.dirname(currentFilePath);
     const resolved = path.posix.normalize(path.posix.join(currentDir, linkPath));
     logger?.debug(`[normalizePath] RELATIVE PATH RESOLVED: "${linkPath}" -> "${resolved}" (currentDir: "${currentDir}")`);
     return resolved;
-  }
-
-  // Remove leading './'
-  if (linkPath.startsWith('./')) {
-    return linkPath.slice(2);
   }
 
   logger?.debug(`[normalizePath] AFTER: "${linkPath}" (no changes)`);
@@ -286,7 +284,12 @@ function transformLink(linkText: string, linkUrl: string, context: LinkContext):
   }
 
   // Check if this links to an imported file
-  const targetPath = context.global.sourceToTargetMap.get(normalizedPath);
+  let targetPath = context.global.sourceToTargetMap.get(normalizedPath);
+
+  // If not found and path ends with /, try looking for index.md
+  if (!targetPath && normalizedPath.endsWith('/')) {
+    targetPath = context.global.sourceToTargetMap.get(normalizedPath + 'index.md');
+  }
 
   if (targetPath) {
     // This is an internal link to an imported file

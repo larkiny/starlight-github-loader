@@ -67,7 +67,6 @@ export function githubLoader({
   return {
     name: "github-loader",
     load: async (context) => {
-      const { store } = context;
 
       // Create global logger with specified level or default
       const globalLogger = createLogger(logLevel || 'default');
@@ -91,12 +90,9 @@ export function githubLoader({
 
       globalLogger.debug(`Loading data from ${configs.length} sources`);
 
-      // Always use standard processing - no file deletions to avoid Astro issues
-      globalLogger.info(clear ? "Processing with content store clear" : "Processing without content store clear");
-
-      if (clear) {
-        store.clear();
-      }
+      // Log clear mode status - actual clearing happens per-entry in toCollectionEntry
+      // to avoid breaking Astro's content collection by emptying the store all at once
+      globalLogger.info(clear ? "Processing with selective entry replacement" : "Processing without entry replacement");
 
       // Process each config sequentially to avoid overwhelming GitHub API/CDN
       for (let i = 0; i < configs.length; i++) {
@@ -171,6 +167,19 @@ export function githubLoader({
             configLogger.info(`🔄 Force mode enabled for ${configName} - proceeding with full import`);
           }
 
+          // Determine effective clear setting: per-config takes precedence over global
+          const effectiveClear = config.clear ?? clear;
+
+          // Perform selective cleanup before importing if clear is enabled
+          if (effectiveClear) {
+            configLogger.info(`🧹 Clearing obsolete files for ${configName}...`);
+            try {
+              await performSelectiveCleanup(config, { ...context, logger: configLogger as any }, octokit);
+            } catch (error) {
+              configLogger.warn(`Cleanup failed for ${configName}, continuing with import: ${error}`);
+            }
+          }
+
           // Perform the import with spinner
           const stats = await globalLogger.withSpinner(
             `🔄 Importing ${configName}...`,
@@ -180,6 +189,7 @@ export function githubLoader({
               options: config,
               fetchOptions,
               force,
+              clear: effectiveClear,
             }),
             `✅ ${configName} imported successfully`,
             `❌ ${configName} import failed`

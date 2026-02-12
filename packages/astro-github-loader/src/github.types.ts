@@ -216,6 +216,13 @@ export type CollectionEntryOptions = {
    * @default false
    */
   force?: boolean;
+  /**
+   * When true, deletes existing store entries before setting new ones.
+   * This enables atomic replacement of entries without breaking the content collection.
+   * Passed from GithubLoaderOptions.clear
+   * @internal
+   */
+  clear?: boolean;
 };
 
 /**

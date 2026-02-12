@@ -584,17 +584,52 @@ const REMOTE_CONTENT_WITH_ASSETS: ImportOptions[] = [
 
 ## File Management Strategy
 
-> **⚠️ Important: Do not use `clear: true`**
->
-> The `clear: true` option should not be used with the current implementation due to how Astro content collection syncing works. Mass file deletions can cause Astro to invalidate entire content collections, leading to 404 errors and build instability.
->
-> **Instead**: If you need to handle file deletions, renames, or path restructuring from the source repository:
->
-> 1. Manually delete the local import folders (e.g., `src/content/docs/imported`)
-> 2. Re-run the import process
-> 3. Fresh content will be imported with the new structure
->
-> This approach ensures your site remains stable while handling structural changes.
+The `clear` option enables selective replacement of content collection entries during import. When enabled, existing entries are atomically replaced (deleted then re-added) one at a time, preserving content collection stability.
+
+### Using the Clear Option
+
+```typescript
+// Per-config clear (recommended)
+const REMOTE_CONTENT: ImportOptions[] = [
+  {
+    name: "Docs that need clearing",
+    owner: "your-org",
+    repo: "docs-repo",
+    clear: true,  // Enable clearing for this config only
+    includes: [
+      { pattern: "docs/**/*.md", basePath: "src/content/docs/imported" }
+    ],
+  },
+  {
+    name: "Docs that don't need clearing",
+    owner: "your-org",
+    repo: "other-docs",
+    clear: false,  // Explicitly disable (or omit for default behavior)
+    includes: [
+      { pattern: "guides/**/*.md", basePath: "src/content/docs/guides" }
+    ],
+  },
+];
+
+// Or use global clear with per-config override
+await githubLoader({
+  octokit,
+  configs: REMOTE_CONTENT,
+  clear: true,  // Global default - can be overridden per-config
+}).load(context);
+```
+
+### When to Use Clear
+
+- **Use `clear: true`** when you need to ensure stale entries are removed (e.g., files renamed or deleted in the source repo)
+- **Use `clear: false`** (default) for incremental updates where you want to preserve existing entries
+
+### How It Works
+
+Unlike a bulk clear operation, the loader uses a selective delete-before-set approach:
+1. For each file being imported, if an entry already exists, it's deleted immediately before the new entry is added
+2. This atomic replacement ensures the content collection is never empty
+3. Astro's content collection system handles individual deletions gracefully
 
 ## Change Detection & Dry-Run Mode
 
