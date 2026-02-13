@@ -14,6 +14,7 @@ export type {
   PathMappingValue,
   EnhancedPathMapping,
   VersionConfig,
+  LoaderContext,
 } from "./github.types.js";
 
 // Public API — types: transforms

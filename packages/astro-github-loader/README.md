@@ -21,6 +21,7 @@ import {
   githubLoader,
   createOctokitFromEnv,
   type ImportOptions,
+  type LoaderContext,
 } from "@larkiny/astro-github-loader";
 
 const REMOTE_CONTENT: ImportOptions[] = [
@@ -54,7 +55,7 @@ export const collections = {
             configs: [config],
             clear: config.clear,
             dryRun: false, // Set to true for change detection only
-          }).load(context);
+          }).load(context as LoaderContext);
         }
       },
     },
