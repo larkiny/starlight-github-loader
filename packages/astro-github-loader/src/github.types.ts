@@ -343,7 +343,8 @@ export type FetchOptions = RequestInit & {
 };
 
 /**
- * @internal
+ * Astro loader context extended with optional entry type support.
+ * Use this type when calling `.load(context as LoaderContext)` in multi-loader patterns.
  */
 export interface LoaderContext extends AstroLoaderContext {
   /** @internal */
