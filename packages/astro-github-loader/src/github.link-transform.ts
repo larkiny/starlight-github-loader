@@ -189,6 +189,13 @@ function applyLinkMappings(
     let matched = false;
     let replacement = "";
 
+    const getLinkTransformContext = (): LinkTransformContext =>
+      context.currentFile.linkContext ?? {
+        sourcePath: context.currentFile.sourcePath,
+        targetPath: context.currentFile.targetPath,
+        basePath: "",
+      };
+
     if (typeof mapping.pattern === "string") {
       // String pattern - exact match or contains
       if (transformedPath.includes(mapping.pattern)) {
@@ -199,12 +206,10 @@ function applyLinkMappings(
             mapping.replacement,
           );
         } else {
-          const linkTransformContext =
-            context.currentFile.linkContext ?? ({} as LinkTransformContext);
           replacement = mapping.replacement(
             transformedPath,
             anchor,
-            linkTransformContext,
+            getLinkTransformContext(),
           );
         }
       }
@@ -219,12 +224,10 @@ function applyLinkMappings(
             mapping.replacement,
           );
         } else {
-          const linkTransformContext =
-            context.currentFile.linkContext ?? ({} as LinkTransformContext);
           replacement = mapping.replacement(
             transformedPath,
             anchor,
-            linkTransformContext,
+            getLinkTransformContext(),
           );
         }
       }

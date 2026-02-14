@@ -1,4 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
+import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { syncFile, storeProcessedFile } from "./github.storage.js";
 import { createMockContext } from "./test-helpers.js";
@@ -40,12 +41,14 @@ describe("syncFile", () => {
   it("creates directory and writes file when directory does not exist", async () => {
     await syncFile("some/nested/dir/file.md", "content");
 
-    expect(mockedExistsSync).toHaveBeenCalledWith("some/nested/dir");
-    expect(mockedMkdir).toHaveBeenCalledWith("some/nested/dir", {
+    const resolved = resolve("some/nested/dir/file.md");
+    const resolvedDir = resolved.substring(0, resolved.lastIndexOf("/"));
+    expect(mockedExistsSync).toHaveBeenCalledWith(resolvedDir);
+    expect(mockedMkdir).toHaveBeenCalledWith(resolvedDir, {
       recursive: true,
     });
     expect(mockedWriteFile).toHaveBeenCalledWith(
-      "some/nested/dir/file.md",
+      resolved,
       "content",
       "utf-8",
     );
@@ -56,10 +59,12 @@ describe("syncFile", () => {
 
     await syncFile("existing/dir/file.md", "content");
 
-    expect(mockedExistsSync).toHaveBeenCalledWith("existing/dir");
+    const resolved = resolve("existing/dir/file.md");
+    const resolvedDir = resolved.substring(0, resolved.lastIndexOf("/"));
+    expect(mockedExistsSync).toHaveBeenCalledWith(resolvedDir);
     expect(mockedMkdir).not.toHaveBeenCalled();
     expect(mockedWriteFile).toHaveBeenCalledWith(
-      "existing/dir/file.md",
+      resolved,
       "content",
       "utf-8",
     );
@@ -68,10 +73,9 @@ describe("syncFile", () => {
   it("skips mkdir when path has no directory component", async () => {
     await syncFile("file.md", "content");
 
-    // dir is "" which is falsy, so existsSync should not be called for dir check
-    expect(mockedMkdir).not.toHaveBeenCalled();
+    // resolved path still has a directory (cwd), but it exists
     expect(mockedWriteFile).toHaveBeenCalledWith(
-      "file.md",
+      resolve("file.md"),
       "content",
       "utf-8",
     );
@@ -82,10 +86,16 @@ describe("syncFile", () => {
     await syncFile("output/test.md", longContent);
 
     expect(mockedWriteFile).toHaveBeenCalledWith(
-      "output/test.md",
+      resolve("output/test.md"),
       longContent,
       "utf-8",
     );
+  });
+
+  it("rejects paths that escape project root", async () => {
+    await expect(
+      syncFile("../../etc/passwd", "malicious"),
+    ).rejects.toThrow("resolves outside project root");
   });
 });
 

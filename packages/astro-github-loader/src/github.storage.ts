@@ -1,18 +1,26 @@
 import { existsSync, promises as fs } from "node:fs";
+import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ImportedFile } from "./github.link-transform.js";
 import type { ExtendedLoaderContext } from "./github.types.js";
 
 /**
  * Ensures directory exists and writes file to disk.
+ * Validates that the resolved path stays within the project root.
  * @internal
  */
-export async function syncFile(path: string, content: string) {
-  const dir = path.substring(0, path.lastIndexOf("/"));
+export async function syncFile(filePath: string, content: string) {
+  const resolved = resolve(filePath);
+  if (!resolved.startsWith(process.cwd())) {
+    throw new Error(
+      `syncFile: path "${filePath}" resolves outside project root`,
+    );
+  }
+  const dir = resolved.substring(0, resolved.lastIndexOf("/"));
   if (dir && !existsSync(dir)) {
     await fs.mkdir(dir, { recursive: true });
   }
-  await fs.writeFile(path, content, "utf-8");
+  await fs.writeFile(resolved, content, "utf-8");
 }
 
 /**

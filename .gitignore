@@ -3,6 +3,10 @@ node_modules/
 
 *.tgz
 
+# environment variables
+.env
+.env.*
+
 # OS generated files
 .DS_Store
 .DS_Store?
