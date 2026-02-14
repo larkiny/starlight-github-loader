@@ -1,5 +1,12 @@
 # Astro GitHub Loader
 
+[![CI](https://github.com/larkiny/starlight-github-loader/actions/workflows/ci.yml/badge.svg)](https://github.com/larkiny/starlight-github-loader/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@larkiny/astro-github-loader?style=flat-square)](https://www.npmjs.com/package/@larkiny/astro-github-loader)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Built with Astro](https://img.shields.io/badge/Astro-BC52EE?style=flat-square&logo=astro&logoColor=white)](https://astro.build)
+[![Built with Starlight](https://img.shields.io/badge/Starlight-FFC517?style=flat-square&logo=astro&logoColor=black)](https://starlight.astro.build)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+
 Load content from GitHub repositories into Astro content collections with flexible pattern-based import, asset management, content transformations, and intelligent change detection.
 
 ## Features
