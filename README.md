@@ -1,5 +1,8 @@
 # Astro GitHub Loader
 
+[![CI](https://github.com/larkiny/starlight-github-loader/actions/workflows/ci.yml/badge.svg)](https://github.com/larkiny/starlight-github-loader/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+
 A powerful content loader for Astro that enables importing and transforming content from GitHub repositories into Astro content collections with intelligent link resolution and asset management.
 
 ## Features
