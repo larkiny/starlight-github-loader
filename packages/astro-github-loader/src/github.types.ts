@@ -272,6 +272,12 @@ export type ImportOptions = {
    */
   name?: string;
   /**
+   * Custom state key for import tracking. When provided, overrides the default
+   * `owner/repo@ref` key used to track import state. This allows the same repo
+   * to be imported independently to multiple locations.
+   */
+  stateKey?: string;
+  /**
    * Repository owner
    */
   owner: string;
