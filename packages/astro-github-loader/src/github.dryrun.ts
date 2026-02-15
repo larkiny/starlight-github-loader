@@ -57,6 +57,9 @@ export interface RepositoryChangeInfo {
  * Creates a unique identifier for an import configuration
  */
 export function createConfigId(config: ImportOptions): string {
+  if (config.stateKey) {
+    return config.stateKey;
+  }
   return `${config.owner}/${config.repo}@${config.ref || "main"}`;
 }
 

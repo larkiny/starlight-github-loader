@@ -51,6 +51,18 @@ describe("github.dryrun", () => {
       expect(id).toBe("algorand/docs@main");
     });
 
+    it("should use custom stateKey when provided", () => {
+      const config: ImportOptions = {
+        owner: "algorandfoundation",
+        repo: "puya",
+        ref: "devportal",
+        stateKey: "puya-legacy-guides",
+        includes: [],
+      };
+
+      expect(createConfigId(config)).toBe("puya-legacy-guides");
+    });
+
     it("should handle different refs correctly", () => {
       const config: ImportOptions = {
         name: "Test Repo",
