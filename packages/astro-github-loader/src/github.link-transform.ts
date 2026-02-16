@@ -337,7 +337,7 @@ function transformLink(
         globalMappings,
         context,
       );
-      if (rawMapped !== linkPath + anchor) {
+      if (rawMapped !== linkPath + anchor && rawMapped.startsWith("/")) {
         return `[${linkText}](${rawMapped})`;
       }
     }
