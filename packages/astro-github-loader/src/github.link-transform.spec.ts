@@ -244,6 +244,39 @@ describe("globalLinkTransform", () => {
       expect(result[0].content).toBe("[See B](/api/page-b/#section)");
     });
 
+    it("should not early-return multi-segment bare-path sibling references with .md", () => {
+      // Multi-segment bare paths like "types/subscription.md" are file-relative
+      // sibling references (e.g., from subscriber.md to types/subscription.md).
+      // The .md-stripping global mapping should NOT cause an early return — the
+      // link must flow through normalizePath() + sourceToTargetMap to resolve.
+      const files: ImportedFile[] = [
+        createImportedFile(
+          "latest/api/subscriber.md",
+          "src/content/docs/docs/algokit-subscriber/typescript/latest/api/subscriber.md",
+          "[`AlgorandSubscriberConfig`](types/subscription.md#algorandsubscriberconfig)",
+        ),
+        createImportedFile(
+          "latest/api/types/subscription.md",
+          "src/content/docs/docs/algokit-subscriber/typescript/latest/api/types/subscription.md",
+          "# subscription",
+        ),
+      ];
+
+      const result = globalLinkTransform(files, {
+        stripPrefixes: ["src/content/docs"],
+        linkMappings: [
+          { pattern: /\.md(#|$)/, replacement: "$1", global: true },
+          { pattern: /\/index(\.md)?$/, replacement: "/", global: true },
+        ],
+        logger,
+      });
+
+      // Should resolve via sourceToTargetMap to absolute URL, NOT leave as relative
+      expect(result[0].content).toBe(
+        "[`AlgorandSubscriberConfig`](/docs/algokit-subscriber/typescript/latest/api/types/subscription/#algorandsubscriberconfig)",
+      );
+    });
+
     it("should preserve anchors in transformed links", () => {
       const files: ImportedFile[] = [
         createImportedFile(
