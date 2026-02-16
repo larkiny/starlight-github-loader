@@ -211,6 +211,39 @@ describe("globalLinkTransform", () => {
       expect(result[0].content).toBe("[Overview](/overview/)");
     });
 
+    it("should not early-return single-segment bare-path sibling references", () => {
+      // Single-segment bare paths like "page-b.md" are sibling-file references.
+      // They must go through normalizePath() (joining with current dir) to resolve
+      // via sourceToTargetMap, NOT be caught by the bare-path pre-normalization check.
+      const files: ImportedFile[] = [
+        createImportedFile(
+          "docs/api/page-a.md",
+          "src/content/docs/api/page-a.md",
+          "[See B](page-b.md#section)",
+        ),
+        createImportedFile(
+          "docs/api/page-b.md",
+          "src/content/docs/api/page-b.md",
+          "# Page B",
+        ),
+      ];
+
+      const result = globalLinkTransform(files, {
+        stripPrefixes: ["src/content/docs"],
+        linkMappings: [
+          {
+            pattern: /\.md(#|$)/,
+            replacement: "$1",
+            global: true,
+          },
+        ],
+        logger,
+      });
+
+      // "page-b.md" normalizes to "docs/api/page-b.md", resolves via sourceToTargetMap
+      expect(result[0].content).toBe("[See B](/api/page-b/#section)");
+    });
+
     it("should preserve anchors in transformed links", () => {
       const files: ImportedFile[] = [
         createImportedFile(

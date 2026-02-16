@@ -318,10 +318,13 @@ function transformLink(
   // Bare-path links (e.g., "docs/markdown/autoapi/foo/") are repo-root-relative
   // but normalizePath() treats them as file-relative, mangling the path.
   // Applying global mappings first lets patterns match the link as written.
-  // Only for bare paths — relative (./, ../) and absolute (/) links must flow
-  // through normalizePath() first to avoid over-matching by generic global
-  // mappings like .md-stripping from generateStarlightLinkMappings().
+  // Only for multi-segment bare paths — relative (./, ../) and absolute (/) links
+  // must flow through normalizePath() first. Single-segment bare paths (no "/")
+  // like "api-algopy" or "types_amount.AlgoAmount" are sibling-file references
+  // that also need normalization, so we require at least one "/" to distinguish
+  // repo-root-relative paths from sibling references.
   const isBareBarePath =
+    linkPath.includes("/") &&
     !linkPath.startsWith("./") &&
     !linkPath.startsWith("../") &&
     !linkPath.startsWith("/") &&
