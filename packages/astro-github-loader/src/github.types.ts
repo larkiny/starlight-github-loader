@@ -261,6 +261,8 @@ export interface VersionConfig {
   slug: string;
   /** Display name for this version (e.g., "Latest", "v8.0.0") */
   label: string;
+  /** Git ref this version was sourced from (e.g., "main", "release/v7"). Optional metadata — not used by the loader. */
+  ref?: string;
 }
 
 /**
