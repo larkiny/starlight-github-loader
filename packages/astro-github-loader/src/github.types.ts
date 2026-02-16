@@ -52,8 +52,8 @@ export interface LinkMapping {
  * Configuration for import link transformation
  */
 export interface ImportLinkTransformOptions {
-  /** Base paths to strip from final URLs (e.g., ["src/content/docs"]) */
-  stripPrefixes: string[];
+  /** Base paths to strip from final URLs. Defaults to ["src/content/docs"] (Starlight convention). */
+  stripPrefixes?: string[];
   /** Custom handlers for special link types */
   customHandlers?: LinkHandler[];
   /** Link mappings to transform URLs in markdown links */
