@@ -120,6 +120,32 @@ describe("globalLinkTransform", () => {
       expect(result[0].content).toBe("[See other](/other/)");
     });
 
+    it("should apply global linkMappings to bare-path links before normalization", () => {
+      const files: ImportedFile[] = [
+        createImportedFile(
+          "docs/markdown/capabilities/guide.md",
+          "src/content/docs/guide.md",
+          "[`AccountManager`](docs/markdown/autoapi/algokit_utils/accounts/account_manager/#algokit_utils.accounts.account_manager.AccountManager)",
+        ),
+      ];
+
+      const result = globalLinkTransform(files, {
+        stripPrefixes: ["src/content/docs"],
+        linkMappings: [
+          {
+            pattern: /^docs\/markdown\/autoapi\/algokit_utils\/(.+)/,
+            replacement: "/docs/algokit-utils/python/latest/api/$1",
+            global: true,
+          },
+        ],
+        logger,
+      });
+
+      expect(result[0].content).toBe(
+        "[`AccountManager`](/docs/algokit-utils/python/latest/api/accounts/account_manager/#algokit_utils.accounts.account_manager.AccountManager)",
+      );
+    });
+
     it("should preserve anchors in transformed links", () => {
       const files: ImportedFile[] = [
         createImportedFile(

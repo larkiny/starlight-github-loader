@@ -314,6 +314,24 @@ function transformLink(
 
   const { path: linkPath, anchor } = extractAnchor(linkUrl);
 
+  // Try global linkMappings on the RAW link path before normalization.
+  // Bare-path links (e.g., "docs/markdown/autoapi/foo/") are repo-root-relative
+  // but normalizePath() treats them as file-relative, mangling the path.
+  // Applying global mappings first lets patterns match the link as written.
+  if (context.global.linkMappings) {
+    const globalMappings = context.global.linkMappings.filter((m) => m.global);
+    if (globalMappings.length > 0) {
+      const rawMapped = applyLinkMappings(
+        linkPath + anchor,
+        globalMappings,
+        context,
+      );
+      if (rawMapped !== linkPath + anchor) {
+        return `[${linkText}](${rawMapped})`;
+      }
+    }
+  }
+
   // Normalize the link path relative to current file FIRST
   const normalizedPath = normalizePath(
     linkPath,
