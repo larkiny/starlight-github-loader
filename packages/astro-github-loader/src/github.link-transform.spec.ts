@@ -146,6 +146,71 @@ describe("globalLinkTransform", () => {
       );
     });
 
+    it("should not early-return relative ./ links when .md-stripping global mappings exist", () => {
+      const files: ImportedFile[] = [
+        createImportedFile(
+          "docs/guide.md",
+          "src/content/docs/guide.md",
+          "[Subscriber](./subscriber.md)",
+        ),
+        createImportedFile(
+          "docs/subscriber.md",
+          "src/content/docs/subscriber.md",
+          "# Subscriber",
+        ),
+      ];
+
+      const result = globalLinkTransform(files, {
+        stripPrefixes: ["src/content/docs"],
+        linkMappings: [
+          {
+            pattern: /\.md(#|$)/,
+            replacement: "$1",
+            global: true,
+          },
+          {
+            pattern: /\/index(\.md)?$/,
+            replacement: "/",
+            global: true,
+          },
+        ],
+        logger,
+      });
+
+      // Should resolve via sourceToTargetMap, not early-return from .md stripping
+      expect(result[0].content).toBe("[Subscriber](/subscriber/)");
+    });
+
+    it("should not early-return relative ../ links when global mappings exist", () => {
+      const files: ImportedFile[] = [
+        createImportedFile(
+          "docs/guides/intro.md",
+          "src/content/docs/guides/intro.md",
+          "[Overview](../overview.md)",
+        ),
+        createImportedFile(
+          "docs/overview.md",
+          "src/content/docs/overview.md",
+          "# Overview",
+        ),
+      ];
+
+      const result = globalLinkTransform(files, {
+        stripPrefixes: ["src/content/docs"],
+        linkMappings: [
+          {
+            pattern: /\.md(#|$)/,
+            replacement: "$1",
+            global: true,
+          },
+        ],
+        logger,
+      });
+
+      // Should resolve via normalization + sourceToTargetMap
+      expect(result[0].content).toBe("[Overview](/overview/)");
+    });
+
     it("should preserve anchors in transformed links", () => {
       const files: ImportedFile[] = [
         createImportedFile(
