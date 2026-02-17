@@ -277,6 +277,36 @@ describe("globalLinkTransform", () => {
       );
     });
 
+    it("should preserve dots and case in generated site URLs", () => {
+      // TypeDoc output uses dot-separated filenames like types_account_manager.AccountManager.md
+      // The generated URL should preserve dots and case to match Starlight's generateId
+      const files: ImportedFile[] = [
+        createImportedFile(
+          "latest/api/classes/types_account_manager.AccountManager.md",
+          "src/content/docs/docs/algokit-utils/typescript/latest/api/classes/types_account_manager.AccountManager.md",
+          "# AccountManager",
+        ),
+        createImportedFile(
+          "latest/api/classes/types_app_factory.AppFactory.md",
+          "src/content/docs/docs/algokit-utils/typescript/latest/api/classes/types_app_factory.AppFactory.md",
+          "[AccountManager](types_account_manager.AccountManager.md)",
+        ),
+      ];
+
+      const result = globalLinkTransform(files, {
+        stripPrefixes: ["src/content/docs"],
+        linkMappings: [
+          { pattern: /\.md(#|$)/, replacement: "$1", global: true },
+        ],
+        logger,
+      });
+
+      // URL should preserve dots and case — NOT slugify to types_account_manageraccountmanager
+      expect(result[1].content).toBe(
+        "[AccountManager](/docs/algokit-utils/typescript/latest/api/classes/types_account_manager.AccountManager/)",
+      );
+    });
+
     it("should preserve anchors in transformed links", () => {
       const files: ImportedFile[] = [
         createImportedFile(

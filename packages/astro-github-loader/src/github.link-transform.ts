@@ -1,4 +1,3 @@
-import { slug } from "github-slugger";
 import path from "node:path";
 import type {
   LinkMapping,
@@ -270,13 +269,11 @@ function generateSiteUrl(targetPath: string, stripPrefixes: string[]): string {
     url = "";
   }
 
-  // Split path into segments and slugify each
-  const segments = url
+  // Filter empty segments (from double slashes etc.)
+  url = url
     .split("/")
-    .map((segment) => (segment ? slug(segment) : ""));
-
-  // Reconstruct URL
-  url = segments.filter((s) => s).join("/");
+    .filter((s) => s)
+    .join("/");
 
   // Ensure leading slash
   if (url && !url.startsWith("/")) {
